@@ -1,0 +1,40 @@
+# Ignorar archivos compilados
+target/
+*.class
+*.jar
+*.war
+*.ear
+
+# Ignorar archivos de log
+*.log
+logs/
+
+# Ignorar archivos de configuración del IDE
+.idea/
+*.iml
+.vscode/
+.settings/
+.project
+.classpath
+
+# Ignorar archivos de sistema
+.DS_Store
+Thumbs.db
+
+# Ignorar archivos de base de datos
+*.db
+*.sqlite
+*.h2.db
+
+# Ignorar archivos de dependencias
+.mvn/
+!.mvn/wrapper/maven-wrapper.jar
+
+# Ignorar archivos de Spring Boot
+HELP.md
+spring-boot-devtools.properties
+
+# Ignorar archivos temporales
+*.tmp
+*.swp
+*~
