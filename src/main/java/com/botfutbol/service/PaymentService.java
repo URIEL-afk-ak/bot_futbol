@@ -110,4 +110,40 @@ public class PaymentService {
     public List<Payment> getAllPayments() {
         return paymentRepository.findAll();
     }
+
+    /**
+     * Edita un pago existente.
+     */
+    public Payment updatePayment(String id, PaymentDTO dto) {
+        Optional<Payment> optionalPayment = paymentRepository.findById(id);
+        if (optionalPayment.isPresent()) {
+            Payment payment = optionalPayment.get();
+            double oldAmount = payment.getAmount();
+            payment.setAmount(dto.getAmount());
+            payment.setConcept(dto.getConcept()); // Usar setConcept, no setDescription
+
+            // Actualizar total pagado del jugador si cambió el monto
+            Optional<Player> playerOpt = playerRepository.findByNameIgnoreCase(payment.getPlayerName());
+            if (playerOpt.isPresent()) {
+                Player player = playerOpt.get();
+                player.setTotalPaid(player.getTotalPaid() - oldAmount + dto.getAmount());
+                playerRepository.save(player);
+            }
+
+            return paymentRepository.save(payment);
+        } else {
+            throw new RuntimeException("Pago no encontrado");
+        }
+    }
+
+    /**
+     * Elimina un pago existente.
+     */
+    public void deletePayment(String id) {
+        if (paymentRepository.existsById(id)) {
+            paymentRepository.deleteById(id);
+        } else {
+            throw new RuntimeException("Pago no encontrado");
+        }
+    }
 }

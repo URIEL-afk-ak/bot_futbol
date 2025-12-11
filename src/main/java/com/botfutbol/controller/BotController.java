@@ -596,4 +596,30 @@ public class BotController {
         }
         return sb.toString();
     }
+
+    /**
+     * Actualizar un pago
+     */
+    @PutMapping("/payment/update/{id}")
+    public ResponseEntity<?> updatePayment(@PathVariable String id, @RequestBody PaymentDTO dto) {
+        try {
+            Payment updated = paymentService.updatePayment(id, dto);
+            return ResponseEntity.ok(updated);
+        } catch (Exception e) {
+            return ResponseEntity.status(404).body("Error al editar pago: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Eliminar un pago
+     */
+    @DeleteMapping("/payment/delete/{id}")
+    public ResponseEntity<?> deletePayment(@PathVariable String id) {
+        try {
+            paymentService.deletePayment(id);
+            return ResponseEntity.ok("Pago eliminado");
+        } catch (Exception e) {
+            return ResponseEntity.status(404).body("Error al eliminar pago: " + e.getMessage());
+        }
+    }
 }
