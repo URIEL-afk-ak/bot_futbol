@@ -27,11 +27,18 @@ public class ChatParsingService {
         "(?i)(\\+1|voy|me anoto|confirmo|presente|asisto|cuenta conmigo|ahí estoy)"
     );
     
-    // Patrones para pagos
+    // Patrones para pagos (mejorados para detectar frases como 'Flavio pago', 'pago de Flavio', 'Flavio pago 7000')
     private static final Pattern PAYMENT_PATTERN = Pattern.compile(
-        "(?i)(pagué|pagado|transferencia|ya está|listo el pago|enviado|depositado)"
+        "(?i)(pagu[éeo]|pagado|transferencia|ya está|listo el pago|enviado|depositado|pago)"
     );
-    
+    // Nuevo: patrones para detectar pagos con nombre en el mensaje
+    private static final Pattern PAYMENT_WITH_NAME_PATTERN_1 = Pattern.compile(
+        "(?i)^([A-Za-zÀ-ÿ\\s]+)\\s*(pago|pagó|pagué|pagado|deposit[oó]|transferencia|enviado|listo el pago)(\\s*\\d+)?"
+    ); // Ej: Flavio pago, Flavio pagó 7000
+    private static final Pattern PAYMENT_WITH_NAME_PATTERN_2 = Pattern.compile(
+        "(?i)^(pago|pagó|pagué|pagado|deposit[oó]|transferencia|enviado|listo el pago) de ([A-Za-zÀ-ÿ\\s]+)"
+    ); // Ej: pago de Flavio
+
     // Patrón para extraer nombre del mensaje de WhatsApp
     // Formato típico: [HH:MM, DD/MM/YYYY] Nombre del Contacto: mensaje
     private static final Pattern WHATSAPP_NAME_PATTERN = Pattern.compile(
@@ -70,19 +77,14 @@ public class ChatParsingService {
         // Getters y setters
         public int getPlayersConfirmed() { return playersConfirmed; }
         public void setPlayersConfirmed(int playersConfirmed) { this.playersConfirmed = playersConfirmed; }
-        
         public int getPaymentsRegistered() { return paymentsRegistered; }
         public void setPaymentsRegistered(int paymentsRegistered) { this.paymentsRegistered = paymentsRegistered; }
-        
         public List<String> getConfirmedPlayers() { return confirmedPlayers; }
         public void setConfirmedPlayers(List<String> confirmedPlayers) { this.confirmedPlayers = confirmedPlayers; }
-        
         public List<String> getPaidPlayers() { return paidPlayers; }
         public void setPaidPlayers(List<String> paidPlayers) { this.paidPlayers = paidPlayers; }
-        
         public List<String> getUnrecognizedMessages() { return unrecognizedMessages; }
         public void setUnrecognizedMessages(List<String> unrecognizedMessages) { this.unrecognizedMessages = unrecognizedMessages; }
-        
         public List<String> getNewPlayersAdded() { return newPlayersAdded; }
         public void setNewPlayersAdded(List<String> newPlayersAdded) { this.newPlayersAdded = newPlayersAdded; }
     }
@@ -93,69 +95,61 @@ public class ChatParsingService {
     @Transactional
     public ChatParsingResult processChatText(String chatText) {
         ChatParsingResult result = new ChatParsingResult();
-        
         if (chatText == null || chatText.trim().isEmpty()) {
             return result;
         }
-        
         // Dividir el texto en líneas
         String[] lines = chatText.split("\\r?\\n");
-        
         for (String line : lines) {
-            if (line.trim().isEmpty()) {
-                continue;
-            }
-            
-            // Intentar extraer nombre y mensaje
+            if (line.trim().isEmpty()) continue;
             ParsedMessage parsed = extractNameAndMessage(line);
-            
-            if (parsed == null) {
-                result.getUnrecognizedMessages().add(line);
+            String name = parsed != null ? parsed.name : null;
+            String message = parsed != null ? parsed.message : line;
+            boolean recognized = false;
+
+            // 1. Buscar pagos con nombre explícito en el mensaje
+            Matcher m1 = PAYMENT_WITH_NAME_PATTERN_1.matcher(message);
+            if (m1.find()) {
+                String detectedName = m1.group(1).trim();
+                Player player = findOrCreatePlayer(detectedName);
+                result.paidPlayers.add(player.getName());
+                result.paymentsRegistered++;
+                recognized = true;
                 continue;
             }
-            
-            String name = parsed.name.trim();
-            String message = parsed.message.trim();
-            
-            // Buscar o crear jugador
-            Player player = findOrCreatePlayer(name);
-            
-            if (player == null) {
-                result.getUnrecognizedMessages().add(line);
+            Matcher m2 = PAYMENT_WITH_NAME_PATTERN_2.matcher(message);
+            if (m2.find()) {
+                String detectedName = m2.group(2).trim();
+                Player player = findOrCreatePlayer(detectedName);
+                result.paidPlayers.add(player.getName());
+                result.paymentsRegistered++;
+                recognized = true;
                 continue;
             }
-            
-            // Verificar si es confirmación de asistencia
-            if (isConfirmation(message)) {
-                if (!player.isAttended()) {
-                    try {
-                        playerService.markAttendance(player.getName(), true);
-                        result.setPlayersConfirmed(result.getPlayersConfirmed() + 1);
-                        result.getConfirmedPlayers().add(player.getName());
-                    } catch (Exception e) {
-                        result.getUnrecognizedMessages().add("Error al confirmar asistencia de " + player.getName());
-                    }
-                }
+
+            // 2. Confirmaciones de asistencia
+            if (name != null && isConfirmation(message)) {
+                Player player = findOrCreatePlayer(name);
+                result.confirmedPlayers.add(player.getName());
+                result.playersConfirmed++;
+                recognized = true;
+                continue;
             }
-            
-            // Verificar si es confirmación de pago
-            if (isPayment(message)) {
-                try {
-                    // Registrar pago usando PaymentDTO
-                    PaymentDTO paymentDTO = new PaymentDTO();
-                    paymentDTO.setPlayerName(player.getName());
-                    paymentDTO.setAmount(0.0); // Monto 0, se ajusta manualmente después
-                    paymentDTO.setConcept("Pago detectado desde chat");
-                    
-                    paymentService.registerPayment(paymentDTO);
-                    result.setPaymentsRegistered(result.getPaymentsRegistered() + 1);
-                    result.getPaidPlayers().add(player.getName());
-                } catch (Exception e) {
-                    result.getUnrecognizedMessages().add("Error al registrar pago de " + player.getName());
-                }
+
+            // 3. Pagos tradicionales (palabra clave, nombre del remitente)
+            if (name != null && isPayment(message)) {
+                Player player = findOrCreatePlayer(name);
+                result.paidPlayers.add(player.getName());
+                result.paymentsRegistered++;
+                recognized = true;
+                continue;
+            }
+
+            // 4. No reconocido
+            if (!recognized) {
+                result.unrecognizedMessages.add(line);
             }
         }
-        
         return result;
     }
     
@@ -166,22 +160,18 @@ public class ChatParsingService {
         // Intentar formato de WhatsApp con timestamp
         Matcher whatsappMatcher = WHATSAPP_NAME_PATTERN.matcher(line);
         if (whatsappMatcher.find()) {
-            return new ParsedMessage(whatsappMatcher.group(1), whatsappMatcher.group(2));
+            return new ParsedMessage(whatsappMatcher.group(1).trim(), whatsappMatcher.group(2).trim());
         }
-        
         // Intentar formato simple
         Matcher simpleMatcher = SIMPLE_NAME_PATTERN.matcher(line);
         if (simpleMatcher.find()) {
-            return new ParsedMessage(simpleMatcher.group(1), simpleMatcher.group(2));
+            return new ParsedMessage(simpleMatcher.group(1).trim(), simpleMatcher.group(2).trim());
         }
-        
         // Intentar formato de lista numerada (1. Nombre o 1) Nombre)
         Matcher numberedMatcher = NUMBERED_LIST_PATTERN.matcher(line.trim());
         if (numberedMatcher.find()) {
-            // En lista numerada, el nombre es confirmación implícita
-            return new ParsedMessage(numberedMatcher.group(1), "confirmo");
+            return new ParsedMessage(numberedMatcher.group(1).trim(), "");
         }
-        
         return null;
     }
     
@@ -191,36 +181,13 @@ public class ChatParsingService {
     private Player findOrCreatePlayer(String name) {
         // Limpiar el nombre
         String cleanName = cleanPlayerName(name);
-        
-        if (cleanName.isEmpty() || cleanName.length() < 2) {
-            return null;
-        }
-        
-        // Buscar jugador exacto
-        Optional<Player> exactMatch = playerRepository.findByName(cleanName);
-        if (exactMatch.isPresent()) {
-            return exactMatch.get();
-        }
-        
-        // Buscar jugador por coincidencia aproximada (fuzzy matching)
-        List<Player> allPlayers = playerRepository.findAll();
-        for (Player player : allPlayers) {
-            if (isSimilarName(player.getName(), cleanName)) {
-                return player;
-            }
-        }
-        
-        // Si no existe, crear nuevo jugador con nivel de habilidad por defecto (5)
-        try {
-            PlayerDTO newPlayerDTO = new PlayerDTO();
-            newPlayerDTO.setName(cleanName);
-            newPlayerDTO.setSkillLevel(5);
-            
-            playerService.addPlayer(newPlayerDTO);
-            Optional<Player> newPlayer = playerRepository.findByNameIgnoreCase(cleanName);
-            return newPlayer.orElse(null);
-        } catch (Exception e) {
-            return null;
+        Optional<Player> playerOpt = playerRepository.findByNameIgnoreCase(cleanName);
+        if (playerOpt.isPresent()) {
+            return playerOpt.get();
+        } else {
+            PlayerDTO dto = new PlayerDTO(cleanName, 5, "MED");
+            Player newPlayer = playerService.addPlayer(dto);
+            return newPlayer;
         }
     }
     
@@ -228,57 +195,18 @@ public class ChatParsingService {
      * Limpia el nombre del jugador eliminando caracteres especiales
      */
     private String cleanPlayerName(String name) {
-        // Eliminar caracteres especiales comunes en nombres de contacto
-        String cleaned = name.replaceAll("[~+*]", "").trim();
-        
-        // Eliminar números de teléfono al inicio
-        cleaned = cleaned.replaceAll("^\\+?\\d+\\s+", "");
-        
-        // Capitalizar primera letra de cada palabra
-        String[] words = cleaned.split("\\s+");
-        StringBuilder result = new StringBuilder();
-        
-        for (String word : words) {
-            if (!word.isEmpty()) {
-                result.append(Character.toUpperCase(word.charAt(0)))
-                      .append(word.substring(1).toLowerCase())
-                      .append(" ");
-            }
-        }
-        
-        return result.toString().trim();
+        if (name == null) return "";
+        return name.replaceAll("[^A-Za-zÀ-ÿ\\s]", "").replaceAll("\\s+", " ").trim();
     }
     
     /**
      * Verifica si dos nombres son similares (para manejar apodos o errores)
      */
     private boolean isSimilarName(String name1, String name2) {
-        String n1 = name1.toLowerCase().trim();
-        String n2 = name2.toLowerCase().trim();
-        
-        // Coincidencia exacta
-        if (n1.equals(n2)) {
-            return true;
-        }
-        
-        // Coincidencia si uno contiene al otro (para apodos)
-        if (n1.contains(n2) || n2.contains(n1)) {
-            return true;
-        }
-        
-        // Coincidencia por palabras (para nombres compuestos)
-        String[] words1 = n1.split("\\s+");
-        String[] words2 = n2.split("\\s+");
-        
-        for (String w1 : words1) {
-            for (String w2 : words2) {
-                if (w1.length() >= 3 && w2.length() >= 3 && w1.equals(w2)) {
-                    return true;
-                }
-            }
-        }
-        
-        return false;
+        if (name1 == null || name2 == null) return false;
+        String n1 = cleanPlayerName(name1).toLowerCase();
+        String n2 = cleanPlayerName(name2).toLowerCase();
+        return n1.equals(n2) || n1.contains(n2) || n2.contains(n1);
     }
     
     /**
@@ -301,7 +229,6 @@ public class ChatParsingService {
     private static class ParsedMessage {
         String name;
         String message;
-        
         ParsedMessage(String name, String message) {
             this.name = name;
             this.message = message;
