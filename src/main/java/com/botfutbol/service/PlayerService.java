@@ -28,28 +28,15 @@ public class PlayerService {
      * Agrega un nuevo jugador.
      */
     public Player addPlayer(PlayerDTO playerDTO) {
-        // Validar que el nombre no esté vacío
-        if (playerDTO.getName() == null || playerDTO.getName().trim().isEmpty()) {
-            throw new IllegalArgumentException("El nombre del jugador no puede estar vacío");
-        }
-        
-        // Verificar que no exista un jugador con el mismo nombre
-        Optional<Player> existing = playerRepository.findByNameIgnoreCase(playerDTO.getName());
-        if (existing.isPresent()) {
-            throw new IllegalArgumentException("Ya existe un jugador con ese nombre");
-        }
-        
-        // Crear el jugador
-        Player player = new Player(playerDTO.getName());
-        
-        // Asignar nivel de habilidad si se proporciona
-        if (playerDTO.getSkillLevel() != null) {
-            if (playerDTO.getSkillLevel() < 1 || playerDTO.getSkillLevel() > 10) {
-                throw new IllegalArgumentException("El nivel de habilidad debe estar entre 1 y 10");
-            }
-            player.setSkillLevel(playerDTO.getSkillLevel());
-        }
-        
+        Player player = new Player();
+        player.setName(playerDTO.getName());
+        player.setSkillLevel(playerDTO.getSkillLevel() != null ? playerDTO.getSkillLevel() : 5);
+        player.setPosition(playerDTO.getPosition() != null ? playerDTO.getPosition() : "MED");
+        player.setTotalDebt(0);
+        player.setTotalPaid(0);
+        player.setGamesPlayed(0);
+        player.setGoalsScored(0);
+        player.setAttended(false);
         return playerRepository.save(player);
     }
     
