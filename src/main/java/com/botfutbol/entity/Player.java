@@ -38,6 +38,9 @@ public class Player {
     @Column(name = "attended")
     private boolean attended; // Si asistió al partido actual
 
+    @Column(name = "activo")
+    private boolean activo = true; // Por defecto activo
+
     public Player() {
         this.id = UUID.randomUUID().toString();
         this.skillLevel = 5; // Nivel medio por defecto
@@ -47,6 +50,7 @@ public class Player {
         this.gamesPlayed = 0;
         this.goalsScored = 0;
         this.attended = false;
+        this.activo = true;
     }
 
     public Player(String name) {
@@ -132,6 +136,14 @@ public class Player {
 
     public void setAttended(boolean attended) {
         this.attended = attended;
+    }
+
+    public boolean isActivo() {
+        return activo;
+    }
+
+    public void setActivo(boolean activo) {
+        this.activo = activo;
     }
 
     @Override
