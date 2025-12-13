@@ -111,7 +111,7 @@ public class ChatParsingService {
             Matcher m1 = PAYMENT_WITH_NAME_PATTERN_1.matcher(message);
             if (m1.find()) {
                 String detectedName = m1.group(1).trim();
-                Player player = findOrCreatePlayer(detectedName);
+                Player player = findOrCreatePlayer(detectedName, result);
                 result.paidPlayers.add(player.getName());
                 result.paymentsRegistered++;
                 recognized = true;
@@ -120,7 +120,7 @@ public class ChatParsingService {
             Matcher m2 = PAYMENT_WITH_NAME_PATTERN_2.matcher(message);
             if (m2.find()) {
                 String detectedName = m2.group(2).trim();
-                Player player = findOrCreatePlayer(detectedName);
+                Player player = findOrCreatePlayer(detectedName, result);
                 result.paidPlayers.add(player.getName());
                 result.paymentsRegistered++;
                 recognized = true;
@@ -129,7 +129,7 @@ public class ChatParsingService {
 
             // 2. Confirmaciones de asistencia
             if (name != null && isConfirmation(message)) {
-                Player player = findOrCreatePlayer(name);
+                Player player = findOrCreatePlayer(name, result);
                 result.confirmedPlayers.add(player.getName());
                 result.playersConfirmed++;
                 recognized = true;
@@ -138,7 +138,7 @@ public class ChatParsingService {
 
             // 3. Pagos tradicionales (palabra clave, nombre del remitente)
             if (name != null && isPayment(message)) {
-                Player player = findOrCreatePlayer(name);
+                Player player = findOrCreatePlayer(name, result);
                 result.paidPlayers.add(player.getName());
                 result.paymentsRegistered++;
                 recognized = true;
@@ -186,8 +186,7 @@ public class ChatParsingService {
     /**
      * Busca un jugador existente o crea uno nuevo si no existe
      */
-    private Player findOrCreatePlayer(String name) {
-        // Limpiar el nombre
+    private Player findOrCreatePlayer(String name, ChatParsingResult result) {
         String cleanName = cleanPlayerName(name);
         Optional<Player> playerOpt = playerRepository.findByNameIgnoreCase(cleanName);
         if (playerOpt.isPresent()) {
@@ -195,6 +194,7 @@ public class ChatParsingService {
         } else {
             PlayerDTO dto = new PlayerDTO(cleanName, 5, "MED");
             Player newPlayer = playerService.addPlayer(dto);
+            result.getNewPlayersAdded().add(cleanName);
             return newPlayer;
         }
     }
