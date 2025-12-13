@@ -40,4 +40,9 @@ public interface PlayerRepository extends JpaRepository<Player, String> {
      * Obtiene los mejores goleadores.
      */
     List<Player> findTop10ByOrderByGoalsScoredDesc();
+    
+    /**
+     * Busca un jugador por nombre (case insensitive) y activo.
+     */
+    Optional<Player> findByNameIgnoreCaseAndActivoTrue(String name);
 }

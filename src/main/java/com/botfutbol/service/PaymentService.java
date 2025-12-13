@@ -146,4 +146,11 @@ public class PaymentService {
             throw new RuntimeException("Pago no encontrado");
         }
     }
+
+    /**
+     * Elimina todos los pagos registrados.
+     */
+    public void deleteAllPayments() {
+        paymentRepository.deleteAll();
+    }
 }

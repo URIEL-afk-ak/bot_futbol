@@ -618,4 +618,13 @@ public class BotController {
     public List<PlayerLevelHistoryDTO> getPlayerLevelHistory() {
         return playerService.getPlayerLevelHistory();
     }
+
+    /**
+     * Eliminar todos los pagos
+     */
+    @DeleteMapping("/payments/reset")
+    public ResponseEntity<?> resetAllPayments() {
+        paymentService.deleteAllPayments();
+        return ResponseEntity.ok("Todos los pagos eliminados");
+    }
 }

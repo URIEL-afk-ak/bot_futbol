@@ -188,7 +188,7 @@ public class ChatParsingService {
      */
     private Player findOrCreatePlayer(String name, ChatParsingResult result) {
         String cleanName = cleanPlayerName(name);
-        Optional<Player> playerOpt = playerRepository.findByNameIgnoreCase(cleanName);
+        Optional<Player> playerOpt = playerRepository.findByNameIgnoreCaseAndActivoTrue(cleanName);
         if (playerOpt.isPresent()) {
             return playerOpt.get();
         } else {
