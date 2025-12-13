@@ -127,8 +127,8 @@ public class ChatParsingService {
                 continue;
             }
 
-            // 2. Confirmaciones de asistencia
-            if (name != null && isConfirmation(message)) {
+            // 2. Confirmaciones de asistencia o lista numerada
+            if (name != null && (isConfirmation(message) || message.isEmpty())) {
                 Player player = findOrCreatePlayer(name, result);
                 result.confirmedPlayers.add(player.getName());
                 result.playersConfirmed++;

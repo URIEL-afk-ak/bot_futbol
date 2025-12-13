@@ -3,8 +3,11 @@ package com.botfutbol.service;
 import com.botfutbol.dto.PlayerDTO;
 import com.botfutbol.dto.PlayerLevelHistoryDTO;
 import com.botfutbol.entity.Player;
+import com.botfutbol.entity.PlayerLevelHistory;
+import com.botfutbol.repository.PlayerLevelHistoryRepository;
 import com.botfutbol.repository.PlayerRepository;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,6 +24,9 @@ import java.util.Optional;
 public class PlayerService {
     
     private final PlayerRepository playerRepository;
+
+    @Autowired
+    private PlayerLevelHistoryRepository playerLevelHistoryRepository;
     
     public PlayerService(PlayerRepository playerRepository) {
         this.playerRepository = playerRepository;
@@ -75,13 +81,24 @@ public class PlayerService {
         if (skillLevel < 1 || skillLevel > 10) {
             throw new IllegalArgumentException("El nivel de habilidad debe estar entre 1 y 10");
         }
-        
+
         Optional<Player> playerOpt = playerRepository.findByNameIgnoreCase(name);
         if (playerOpt.isEmpty()) {
             throw new IllegalArgumentException("Jugador no encontrado");
         }
-        
+
         Player player = playerOpt.get();
+        int previousLevel = player.getSkillLevel();
+
+        // Guarda el historial antes de cambiar el nivel
+        PlayerLevelHistory history = new PlayerLevelHistory(
+            player.getName(),
+            previousLevel,
+            skillLevel,
+            java.time.LocalDateTime.now()
+        );
+        playerLevelHistoryRepository.save(history);
+
         player.setSkillLevel(skillLevel);
         return playerRepository.save(player);
     }

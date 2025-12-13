@@ -5,15 +5,18 @@ import com.botfutbol.entity.Goal;
 import com.botfutbol.entity.Payment;
 import com.botfutbol.entity.Player;
 import com.botfutbol.entity.Team;
+import com.botfutbol.entity.PlayerLevelHistory;
 import com.botfutbol.service.ChatParsingService;
 import com.botfutbol.service.MatchService;
 import com.botfutbol.service.PaymentService;
 import com.botfutbol.service.PlayerService;
 import com.botfutbol.service.TeamService;
+import com.botfutbol.repository.PlayerLevelHistoryRepository;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -34,17 +37,20 @@ public class BotController {
     private final PaymentService paymentService;
     private final MatchService matchService;
     private final ChatParsingService chatParsingService;
+    private final PlayerLevelHistoryRepository playerLevelHistoryRepository;
     
     public BotController(PlayerService playerService,
                          TeamService teamService,
                          PaymentService paymentService,
                          MatchService matchService,
-                         ChatParsingService chatParsingService) {
+                         ChatParsingService chatParsingService,
+                         PlayerLevelHistoryRepository playerLevelHistoryRepository) {
         this.playerService = playerService;
         this.teamService = teamService;
         this.paymentService = paymentService;
         this.matchService = matchService;
         this.chatParsingService = chatParsingService;
+        this.playerLevelHistoryRepository = playerLevelHistoryRepository;
     }
     
     // ==================== REST API ENDPOINTS ====================
@@ -616,7 +622,38 @@ public class BotController {
      */
     @GetMapping("/player-level-history")
     public List<PlayerLevelHistoryDTO> getPlayerLevelHistory() {
-        return playerService.getPlayerLevelHistory();
+        List<PlayerLevelHistoryDTO> result = new ArrayList<>();
+        List<Player> players = playerService.getAllPlayers();
+
+        for (Player player : players) {
+            List<PlayerLevelHistory> history = playerLevelHistoryRepository.findByPlayerNameOrderByDateAsc(player.getName());
+
+            int previousLevel = player.getSkillLevel();
+            double averageLevel = player.getSkillLevel();
+            int suggestedLevel = player.getSkillLevel();
+
+            if (!history.isEmpty()) {
+                // Nivel anterior: penúltimo cambio, o el primero si solo hay uno
+                previousLevel = history.size() > 1
+                    ? history.get(history.size() - 2).getNewLevel()
+                    : history.get(0).getPreviousLevel();
+
+                // Promedio: de todos los newLevel históricos
+                averageLevel = history.stream().mapToInt(PlayerLevelHistory::getNewLevel).average().orElse(player.getSkillLevel());
+
+                // Nivel sugerido: redondeo del promedio
+                suggestedLevel = (int) Math.round(averageLevel);
+            }
+
+            PlayerLevelHistoryDTO dto = new PlayerLevelHistoryDTO(
+                player.getName(),
+                previousLevel,
+                averageLevel,
+                suggestedLevel
+            );
+            result.add(dto);
+        }
+        return result;
     }
 
     /**
