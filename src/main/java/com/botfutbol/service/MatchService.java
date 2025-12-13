@@ -132,7 +132,7 @@ public class MatchService {
         // Top goleadores
         List<Player> topScorers = playerService.getTopScorers(5);
         List<PlayerStatsDTO> topScorersDTOs = topScorers.stream()
-                .map(p -> new PlayerStatsDTO(p.getName(), p.getGoalsScored(), p.getGamesPlayed()))
+                .map(p -> new PlayerStatsDTO(p.getName(), p.getGoalsScored(), p.getGamesPlayed(), 0))
                 .collect(Collectors.toList());
         stats.setTopScorers(topScorersDTOs);
         
