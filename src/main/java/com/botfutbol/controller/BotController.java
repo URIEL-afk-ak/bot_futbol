@@ -459,19 +459,7 @@ public class BotController {
         
         StringBuilder sb = new StringBuilder("📊 Estadísticas:\n\n");
         
-        // Goleadores
-        sb.append("⚽ Top Goleadores:\n");
-        if (stats.getTopScorers().isEmpty()) {
-            sb.append("  Sin goles registrados\n");
-        } else {
-            for (PlayerStatsDTO scorer : stats.getTopScorers()) {
-                sb.append(String.format("  %d. %s - %d goles en %d partidos\n",
-                        stats.getTopScorers().indexOf(scorer) + 1,
-                        scorer.getName(),
-                        scorer.getGoalsScored(),
-                        scorer.getGamesPlayed()));
-            }
-        }
+     
         
         sb.append("\n💰 Deudores:\n");
         if (stats.getDebtors().isEmpty()) {
@@ -621,5 +609,13 @@ public class BotController {
         } catch (Exception e) {
             return ResponseEntity.status(404).body("Error al eliminar pago: " + e.getMessage());
         }
+    }
+
+    /**
+     * Obtener historial de niveles de jugadores
+     */
+    @GetMapping("/player-level-history")
+    public List<PlayerLevelHistoryDTO> getPlayerLevelHistory() {
+        return playerService.getPlayerLevelHistory();
     }
 }

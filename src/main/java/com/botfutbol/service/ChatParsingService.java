@@ -52,7 +52,7 @@ public class ChatParsingService {
     
     // Patrón para lista numerada: 1. Nombre o 1) Nombre
     private static final Pattern NUMBERED_LIST_PATTERN = Pattern.compile(
-        "^\\d+[.)\\s]+\\s*([A-Za-zÀ-ÿ\\s⁠]+)\\s*$"
+        "^\\d+[.)\\s]+\\s*([\\p{L}0-9ÁÉÍÓÚÑáéíóúñ'’\\- ]+)\\s*$"
     );
     
     public ChatParsingService(PlayerRepository playerRepository, 
@@ -157,18 +157,26 @@ public class ChatParsingService {
      * Extrae nombre y mensaje de una línea de chat
      */
     private ParsedMessage extractNameAndMessage(String line) {
+        // Limpiar caracteres invisibles Unicode (como U+2060, U+200B, U+FEFF, etc.)
+        String cleanLine = line.replaceAll("[\\u200B-\\u200D\\uFEFF\\u2060]", "").trim();
+
+        // Ignorar encabezados tipo *LUNES 20 HS* o similares
+        if (cleanLine.matches("^\\*?[A-ZÁÉÍÓÚÑ ]+\\*?\\s*\\d{1,2}\\s*HS\\*?$")) {
+            return null;
+        }
+
         // Intentar formato de WhatsApp con timestamp
-        Matcher whatsappMatcher = WHATSAPP_NAME_PATTERN.matcher(line);
+        Matcher whatsappMatcher = WHATSAPP_NAME_PATTERN.matcher(cleanLine);
         if (whatsappMatcher.find()) {
             return new ParsedMessage(whatsappMatcher.group(1).trim(), whatsappMatcher.group(2).trim());
         }
         // Intentar formato simple
-        Matcher simpleMatcher = SIMPLE_NAME_PATTERN.matcher(line);
+        Matcher simpleMatcher = SIMPLE_NAME_PATTERN.matcher(cleanLine);
         if (simpleMatcher.find()) {
             return new ParsedMessage(simpleMatcher.group(1).trim(), simpleMatcher.group(2).trim());
         }
         // Intentar formato de lista numerada (1. Nombre o 1) Nombre)
-        Matcher numberedMatcher = NUMBERED_LIST_PATTERN.matcher(line.trim());
+        Matcher numberedMatcher = NUMBERED_LIST_PATTERN.matcher(cleanLine);
         if (numberedMatcher.find()) {
             return new ParsedMessage(numberedMatcher.group(1).trim(), "");
         }

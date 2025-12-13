@@ -1,12 +1,14 @@
 package com.botfutbol.service;
 
 import com.botfutbol.dto.PlayerDTO;
+import com.botfutbol.dto.PlayerLevelHistoryDTO;
 import com.botfutbol.entity.Player;
 import com.botfutbol.repository.PlayerRepository;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -141,5 +143,28 @@ public class PlayerService {
         Player player = playerOpt.get();
         player.setAttended(attended);
         playerRepository.save(player);
+    }
+    
+    /**
+     * Obtiene el historial de niveles de habilidad de los jugadores.
+     */
+    public List<PlayerLevelHistoryDTO> getPlayerLevelHistory() {
+        List<PlayerLevelHistoryDTO> result = new ArrayList<>();
+        List<Player> players = getAllPlayers(); // Usa tu método real para obtener jugadores
+
+        for (Player player : players) {
+            int previousLevel = player.getSkillLevel(); // O el nivel anterior real si tienes historial
+            double averageLevel = player.getSkillLevel(); // Calcula el promedio real si tienes historial
+            int suggestedLevel = player.getSkillLevel(); // Aplica tu lógica para sugerido
+
+            PlayerLevelHistoryDTO dto = new PlayerLevelHistoryDTO(
+                player.getName(),
+                previousLevel,
+                averageLevel,
+                suggestedLevel
+            );
+            result.add(dto);
+        }
+        return result;
     }
 }
