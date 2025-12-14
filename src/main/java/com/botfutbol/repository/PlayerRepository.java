@@ -45,4 +45,9 @@ public interface PlayerRepository extends JpaRepository<Player, String> {
      * Busca un jugador por nombre (case insensitive) y activo.
      */
     Optional<Player> findByNameIgnoreCaseAndActivoTrue(String name);
+    
+    /**
+     * Obtiene todos los jugadores activos.
+     */
+    List<Player> findAllByActivoTrue();
 }

@@ -167,12 +167,33 @@ public class PlayerService {
      */
     public List<PlayerLevelHistoryDTO> getPlayerLevelHistory() {
         List<PlayerLevelHistoryDTO> result = new ArrayList<>();
-        List<Player> players = getAllPlayers(); // Usa tu método real para obtener jugadores
+        List<Player> players = playerRepository.findAllByActivoTrue();
 
         for (Player player : players) {
-            int previousLevel = player.getSkillLevel(); // O el nivel anterior real si tienes historial
-            double averageLevel = player.getSkillLevel(); // Calcula el promedio real si tienes historial
-            int suggestedLevel = player.getSkillLevel(); // Aplica tu lógica para sugerido
+            List<PlayerLevelHistory> history = playerLevelHistoryRepository
+                .findByPlayerNameOrderByDateAsc(player.getName());
+
+            int previousLevel;
+            double averageLevel;
+            int suggestedLevel;
+
+            if (history.size() >= 2) {
+                // Nivel anterior: penúltimo cambio
+                previousLevel = history.get(history.size() - 2).getNewLevel();
+                // Promedio: todos los newLevel menos el último (actual)
+                averageLevel = history.subList(0, history.size() - 1)
+                    .stream()
+                    .mapToInt(PlayerLevelHistory::getNewLevel)
+                    .average()
+                    .orElse(previousLevel);
+            } else if (history.size() == 1) {
+                previousLevel = history.get(0).getPreviousLevel();
+                averageLevel = history.get(0).getPreviousLevel();
+            } else {
+                previousLevel = player.getSkillLevel();
+                averageLevel = player.getSkillLevel();
+            }
+            suggestedLevel = (int) Math.round(averageLevel);
 
             PlayerLevelHistoryDTO dto = new PlayerLevelHistoryDTO(
                 player.getName(),
