@@ -40,10 +40,19 @@ public class TeamService {
         // Mezclar jugadores aleatoriamente
         Collections.shuffle(allPlayers);
         
-        // Dividir en dos equipos
-        int mid = allPlayers.size() / 2;
-        List<Player> teamAPlayers = allPlayers.subList(0, mid);
-        List<Player> teamBPlayers = allPlayers.subList(mid, allPlayers.size());
+        // Calcular tamaño de equipos
+        int total = allPlayers.size();
+        int teamSize = total / 2;
+
+        // Equipos equitativos
+        List<Player> teamAPlayers = allPlayers.subList(0, teamSize);
+        List<Player> teamBPlayers = allPlayers.subList(teamSize, teamSize * 2);
+
+        // Si hay un jugador impar, lo dejas afuera o lo asignas como suplente
+        List<Player> suplentes = new ArrayList<>();
+        if (total % 2 != 0) {
+            suplentes.add(allPlayers.get(total - 1));
+        }
         
         Team teamA = new Team("A", "Equipo A");
         teamAPlayers.forEach(teamA::addPlayer);
@@ -51,6 +60,7 @@ public class TeamService {
         Team teamB = new Team("B", "Equipo B");
         teamBPlayers.forEach(teamB::addPlayer);
         
+        // Puedes devolver los suplentes en la respuesta si quieres
         return Arrays.asList(teamA, teamB);
     }
     

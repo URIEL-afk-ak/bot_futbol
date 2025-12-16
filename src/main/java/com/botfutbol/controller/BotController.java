@@ -6,13 +6,17 @@ import com.botfutbol.entity.Payment;
 import com.botfutbol.entity.Player;
 import com.botfutbol.entity.Team;
 import com.botfutbol.entity.PlayerLevelHistory;
+import com.botfutbol.entity.User;
 import com.botfutbol.service.ChatParsingService;
 import com.botfutbol.service.MatchService;
 import com.botfutbol.service.PaymentService;
 import com.botfutbol.service.PlayerService;
 import com.botfutbol.service.TeamService;
+import com.botfutbol.service.UserService;
 import com.botfutbol.repository.PlayerLevelHistoryRepository;
 
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -38,6 +42,9 @@ public class BotController {
     private final MatchService matchService;
     private final ChatParsingService chatParsingService;
     private final PlayerLevelHistoryRepository playerLevelHistoryRepository;
+    
+    @Autowired
+    private UserService userService;
     
     public BotController(PlayerService playerService,
                          TeamService teamService,
@@ -78,8 +85,16 @@ public class BotController {
     @PutMapping("/player/update/{oldName}")
     public ResponseEntity<String> updatePlayer(@PathVariable String oldName, @RequestBody PlayerDTO dto) {
         try {
-            playerService.removePlayer(oldName);
-            Player player = playerService.addPlayer(dto);
+            Optional<Player> playerOpt = playerService.findPlayerByName(oldName);
+            if (playerOpt.isEmpty()) {
+                return ResponseEntity.badRequest().body("Jugador no encontrado: " + oldName);
+            }
+            Player player = playerOpt.get();
+            player.setName(dto.getName());
+            player.setSkillLevel(dto.getSkillLevel() != null ? dto.getSkillLevel() : player.getSkillLevel());
+            player.setPosition(dto.getPosition() != null ? dto.getPosition() : player.getPosition());
+            // NO toques player.setAttended(...) aquí, así se mantiene igual
+            playerService.updatePlayer(player);
             return ResponseEntity.ok(String.format("Jugador actualizado: %s", player.getName()));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body("Error al actualizar: " + e.getMessage());
@@ -663,5 +678,35 @@ public class BotController {
     public ResponseEntity<?> resetAllPayments() {
         paymentService.deleteAllPayments();
         return ResponseEntity.ok("Todos los pagos eliminados");
+    }
+
+    /**
+     * Login de usuario
+     */
+    @PostMapping("/login")
+    public ResponseEntity<String> login(@RequestBody UserDTO loginData) {
+        String email = loginData.getEmail();
+        String password = loginData.getPassword();
+        User user = userService.findByEmail(email);
+        if (user != null && user.getPassword().equals(password)) {
+            return ResponseEntity.ok("Login exitoso");
+        } else {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Credenciales inválidas");
+        }
+    }
+
+    /**
+     * Registro de usuario
+     */
+    @PostMapping("/register")
+    public ResponseEntity<String> register(@RequestBody UserDTO userDTO) {
+        if (userService.findByEmail(userDTO.getEmail()) != null) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body("El email ya está registrado");
+        }
+        User user = new User();
+        user.setEmail(userDTO.getEmail());
+        user.setPassword(userDTO.getPassword()); // Para producción, usa hash
+        userService.save(user);
+        return ResponseEntity.ok("Usuario registrado exitosamente");
     }
 }
