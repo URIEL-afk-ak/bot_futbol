@@ -13,24 +13,25 @@ import java.util.Optional;
  */
 @Repository
 public interface MatchRepository extends JpaRepository<Match, String> {
-    
-    /**
-     * Devuelve el partido activo actual.
-     */
+
+    // Devuelve partidos por usuario
+    List<Match> findByUser(com.botfutbol.entity.User user);
+
+    // Devuelve el partido activo actual por usuario
+    Optional<Match> findFirstByActiveTrueAndUser(com.botfutbol.entity.User user);
+
+    // Devuelve todos los partidos activos por usuario
+    List<Match> findByActiveTrueAndUser(com.botfutbol.entity.User user);
+
+    // Devuelve todos los partidos inactivos por usuario
+    List<Match> findByActiveFalseAndUser(com.botfutbol.entity.User user);
+
+    // Cuenta partidos activos por usuario
+    long countByActiveTrueAndUser(com.botfutbol.entity.User user);
+
+    // Métodos originales (si necesitas compatibilidad)
     Optional<Match> findFirstByActiveTrue();
-    
-    /**
-     * Devuelve todos los partidos activos.
-     */
     List<Match> findByActiveTrue();
-    
-    /**
-     * Devuelve todos los partidos inactivos.
-     */
     List<Match> findByActiveFalse();
-    
-    /**
-     * Cuenta partidos activos.
-     */
     long countByActiveTrue();
 }

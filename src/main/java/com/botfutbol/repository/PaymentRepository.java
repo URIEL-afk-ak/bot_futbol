@@ -13,20 +13,23 @@ import java.util.List;
  */
 @Repository
 public interface PaymentRepository extends JpaRepository<Payment, String> {
-    
-    /**
-     * Busca pagos por jugador (ID).
-     */
+
+    // Busca pagos por usuario
+    List<Payment> findByUser(com.botfutbol.entity.User user);
+
+    // Busca pagos por jugador (ID) y usuario
+    List<Payment> findByPlayerIdAndUser(String playerId, com.botfutbol.entity.User user);
+
+    // Busca pagos por nombre de jugador (case insensitive) y usuario
+    List<Payment> findByPlayerNameIgnoreCaseAndUser(String playerName, com.botfutbol.entity.User user);
+
+    // Calcula el total pagado por un jugador y usuario
+    @Query("SELECT SUM(p.amount) FROM Payment p WHERE p.playerId = :playerId AND p.user = :user")
+    Double getTotalPaidByPlayerAndUser(String playerId, com.botfutbol.entity.User user);
+
+    // Métodos originales (si necesitas compatibilidad)
     List<Payment> findByPlayerId(String playerId);
-    
-    /**
-     * Busca pagos por nombre de jugador (case insensitive).
-     */
     List<Payment> findByPlayerNameIgnoreCase(String playerName);
-    
-    /**
-     * Calcula el total pagado por un jugador.
-     */
     @Query("SELECT SUM(p.amount) FROM Payment p WHERE p.playerId = :playerId")
     Double getTotalPaidByPlayer(String playerId);
 }

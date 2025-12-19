@@ -8,8 +8,10 @@ import java.util.List;
 public class ChatParsingResponseDTO {
     private int playersConfirmed;
     private int paymentsRegistered;
+    private int attendanceMarked; // Nuevo: cantidad de asistencias marcadas masivamente
     private List<String> confirmedPlayers;
     private List<String> paidPlayers;
+    private List<String> attendanceMarkedPlayers; // Nuevo: jugadores con asistencia marcada
     private List<String> unrecognizedMessages;
     private List<String> newPlayersAdded;
     
@@ -32,6 +34,14 @@ public class ChatParsingResponseDTO {
         this.paymentsRegistered = paymentsRegistered;
     }
     
+    public int getAttendanceMarked() {
+        return attendanceMarked;
+    }
+    
+    public void setAttendanceMarked(int attendanceMarked) {
+        this.attendanceMarked = attendanceMarked;
+    }
+    
     public List<String> getConfirmedPlayers() {
         return confirmedPlayers;
     }
@@ -46,6 +56,14 @@ public class ChatParsingResponseDTO {
     
     public void setPaidPlayers(List<String> paidPlayers) {
         this.paidPlayers = paidPlayers;
+    }
+    
+    public List<String> getAttendanceMarkedPlayers() {
+        return attendanceMarkedPlayers;
+    }
+    
+    public void setAttendanceMarkedPlayers(List<String> attendanceMarkedPlayers) {
+        this.attendanceMarkedPlayers = attendanceMarkedPlayers;
     }
     
     public List<String> getUnrecognizedMessages() {

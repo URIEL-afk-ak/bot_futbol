@@ -37,6 +37,10 @@ public class Match {
     @Column(name = "team_b_data", columnDefinition = "TEXT")
     private String teamBData;
     
+    @ManyToOne
+    @JoinColumn(name = "user_id")
+    private User user;
+    
     public Match() {
         this.id = UUID.randomUUID().toString();
         this.date = LocalDateTime.now();
@@ -98,6 +102,14 @@ public class Match {
     
     public void setCostPerPlayer(double costPerPlayer) {
         this.costPerPlayer = costPerPlayer;
+    }
+    
+    public User getUser() {
+        return user;
+    }
+    
+    public void setUser(User user) {
+        this.user = user;
     }
     
     @Override

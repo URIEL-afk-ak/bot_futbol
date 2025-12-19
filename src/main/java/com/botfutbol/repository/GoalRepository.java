@@ -12,29 +12,29 @@ import java.util.List;
  */
 @Repository
 public interface GoalRepository extends JpaRepository<Goal, String> {
-    
-    /**
-     * Busca goles por jugador (ID).
-     */
+
+    // Busca goles por usuario
+    List<Goal> findByUser(com.botfutbol.entity.User user);
+
+    // Busca goles por jugador (ID) y usuario
+    List<Goal> findByPlayerIdAndUser(String playerId, com.botfutbol.entity.User user);
+
+    // Busca goles por equipo y usuario
+    List<Goal> findByTeamIdAndUser(String teamId, com.botfutbol.entity.User user);
+
+    // Busca goles por partido y usuario
+    List<Goal> findByMatchIdAndUser(String matchId, com.botfutbol.entity.User user);
+
+    // Cuenta goles de un jugador y usuario
+    long countByPlayerIdAndUser(String playerId, com.botfutbol.entity.User user);
+
+    // Cuenta goles de un equipo y usuario
+    long countByTeamIdAndUser(String teamId, com.botfutbol.entity.User user);
+
+    // Métodos originales (si necesitas compatibilidad)
     List<Goal> findByPlayerId(String playerId);
-    
-    /**
-     * Busca goles por equipo.
-     */
     List<Goal> findByTeamId(String teamId);
-    
-    /**
-     * Busca goles por partido.
-     */
     List<Goal> findByMatchId(String matchId);
-    
-    /**
-     * Cuenta goles de un jugador.
-     */
     long countByPlayerId(String playerId);
-    
-    /**
-     * Cuenta goles de un equipo.
-     */
     long countByTeamId(String teamId);
 }

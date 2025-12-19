@@ -44,8 +44,9 @@ public class MatchService {
     /**
      * Inicia un nuevo partido.
      */
-    public Match startMatch(Team teamA, Team teamB, double costPerPlayer) {
+    public Match startMatch(Team teamA, Team teamB, double costPerPlayer, User user) {
         Match match = new Match(teamA, teamB, costPerPlayer);
+        match.setUser(user);
         matchRepository.save(match);
         
         // Incrementar partidos jugados y agregar deuda a cada jugador
@@ -65,9 +66,9 @@ public class MatchService {
     /**
      * Registra un gol en el partido actual.
      */
-    public Goal registerGoal(GoalDTO goalDTO) {
+    public Goal registerGoal(GoalDTO goalDTO, User user) {
         // Verificar que hay un partido activo
-        Optional<Match> matchOpt = getActiveMatch();
+        Optional<Match> matchOpt = getActiveMatch(user);
         if (matchOpt.isEmpty()) {
             throw new IllegalStateException("No hay un partido activo");
         }
@@ -75,7 +76,7 @@ public class MatchService {
         Match match = matchOpt.get();
         
         // Buscar el jugador
-        Optional<Player> playerOpt = playerRepository.findByNameIgnoreCase(goalDTO.getPlayerName());
+        Optional<Player> playerOpt = playerRepository.findByNameIgnoreCaseAndUser(goalDTO.getPlayerName(), user);
         if (playerOpt.isEmpty()) {
             throw new IllegalArgumentException("Jugador no encontrado: " + goalDTO.getPlayerName());
         }
@@ -89,6 +90,7 @@ public class MatchService {
                 goalDTO.getTeamId(),
                 match.getId()
         );
+        goal.setUser(user);
         
         // Actualizar estadísticas del jugador
         playerService.recordGoal(player.getId());
@@ -107,15 +109,15 @@ public class MatchService {
     /**
      * Obtiene el partido actual.
      */
-    public Optional<Match> getCurrentMatch() {
-        return matchRepository.findFirstByActiveTrue();
+    public Optional<Match> getCurrentMatch(User user) {
+        return matchRepository.findFirstByActiveTrueAndUser(user);
     }
     
     /**
      * Finaliza el partido actual.
      */
-    public void endMatch() {
-        Optional<Match> matchOpt = matchRepository.findFirstByActiveTrue();
+    public void endMatch(User user) {
+        Optional<Match> matchOpt = matchRepository.findFirstByActiveTrueAndUser(user);
         if (matchOpt.isPresent()) {
             Match match = matchOpt.get();
             match.setActive(false);
@@ -126,26 +128,28 @@ public class MatchService {
     /**
      * Obtiene estadísticas generales.
      */
-    public StatsDTO getStats() {
+    public StatsDTO getStats(User user) {
         StatsDTO stats = new StatsDTO();
         
         // Top goleadores
-        List<Player> topScorers = playerService.getTopScorers(5);
+        List<Player> topScorers = playerService.getTopScorers(5, user);
         List<PlayerStatsDTO> topScorersDTOs = topScorers.stream()
                 .map(p -> new PlayerStatsDTO(p.getName(), p.getGoalsScored(), p.getGamesPlayed(), 0))
                 .collect(Collectors.toList());
         stats.setTopScorers(topScorersDTOs);
         
         // Deudores
-        List<Player> debtors = playerService.getPlayersWithDebt();
+        List<Player> debtors = playerService.getPlayersWithDebt(user);
         List<PlayerDebtDTO> debtorsDTOs = debtors.stream()
                 .map(p -> new PlayerDebtDTO(p.getName(), p.getTotalDebt(), p.getTotalPaid()))
                 .collect(Collectors.toList());
         stats.setDebtors(debtorsDTOs);
         
         // Totales
-        stats.setTotalPlayers((int) playerRepository.count());
-        stats.setTotalGoals((int) goalRepository.count());
+        long totalPlayers = playerRepository.findByUser(user).size();
+        long totalGoals = goalRepository.findByUser(user).size();
+        stats.setTotalPlayers((int) totalPlayers);
+        stats.setTotalGoals((int) totalGoals);
         
         double totalDebt = debtors.stream()
                 .mapToDouble(p -> p.getTotalDebt() - p.getTotalPaid())
@@ -158,8 +162,8 @@ public class MatchService {
     /**
      * Obtiene el resultado del partido actual.
      */
-    public String getCurrentMatchScore() {
-        Optional<Match> matchOpt = matchRepository.findFirstByActiveTrue();
+    public String getCurrentMatchScore(User user) {
+        Optional<Match> matchOpt = matchRepository.findFirstByActiveTrueAndUser(user);
         if (matchOpt.isEmpty()) {
             return "No hay partido activo";
         }
@@ -175,16 +179,21 @@ public class MatchService {
     /**
      * Obtiene todos los goles registrados.
      */
-    public List<Goal> getAllGoals() {
-        return goalRepository.findAll();
+    public List<Goal> getAllGoals(User user) {
+        return goalRepository.findByUser(user);
     }
     
     /**
      * Genera un resumen del partido para compartir en WhatsApp
      */
-    public MatchSummaryDTO getMatchSummary(String matchId) {
+    public MatchSummaryDTO getMatchSummary(String matchId, User user) {
         Match match = matchRepository.findById(matchId)
                 .orElseThrow(() -> new IllegalStateException("Partido no encontrado"));
+        
+        // Verificar que el partido pertenece al usuario
+        if (match.getUser() == null || !match.getUser().getId().equals(user.getId())) {
+            throw new IllegalStateException("Partido no encontrado o no autorizado");
+        }
         
         // Formatear fecha
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy");
@@ -223,7 +232,7 @@ public class MatchService {
         List<String> pendingPlayers = new ArrayList<>();
         
         for (String playerName : allMatchPlayers) {
-            Optional<Player> playerOpt = playerRepository.findByNameIgnoreCase(playerName);
+            Optional<Player> playerOpt = playerRepository.findByNameIgnoreCaseAndUser(playerName, user);
             if (playerOpt.isPresent()) {
                 Player player = playerOpt.get();
                 if (player.getTotalDebt() <= 0) {
@@ -242,7 +251,7 @@ public class MatchService {
     /**
      * Obtiene el partido activo actual.
      */
-    public Optional<Match> getActiveMatch() {
-        return matchRepository.findFirstByActiveTrue();
+    public Optional<Match> getActiveMatch(User user) {
+        return matchRepository.findFirstByActiveTrueAndUser(user);
     }
 }

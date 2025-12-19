@@ -1,8 +1,8 @@
 package com.botfutbol.service;
 
-import com.botfutbol.dto.PaymentDTO;
 import com.botfutbol.dto.PlayerDTO;
 import com.botfutbol.entity.Player;
+import com.botfutbol.entity.User;
 import com.botfutbol.repository.PlayerRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,7 +20,6 @@ public class ChatParsingService {
     
     private final PlayerRepository playerRepository;
     private final PlayerService playerService;
-    private final PaymentService paymentService;
     
     // Patrones regex para identificar confirmaciones
     private static final Pattern CONFIRMATION_PATTERN = Pattern.compile(
@@ -55,12 +54,16 @@ public class ChatParsingService {
         "^\\d+[.)\\s]+\\s*([\\p{L}0-9ÁÉÍÓÚÑáéíóúñ'’\\- ]+)\\s*$"
     );
     
+    // Patrones para comandos de asistencia masiva
+    private static final Pattern MASS_ATTENDANCE_PATTERN = Pattern.compile(
+        "(?i)(todos\\s+asisten|todos\\s+van|todos\\s+confirmados|marcar\\s+asistencia|asistencia\\s+masiva|todos\\s+presentes|confirmar\\s+todos)"
+    );
+    
+    
     public ChatParsingService(PlayerRepository playerRepository, 
-                            PlayerService playerService,
-                            PaymentService paymentService) {
+                            PlayerService playerService) {
         this.playerRepository = playerRepository;
         this.playerService = playerService;
-        this.paymentService = paymentService;
     }
     
     /**
@@ -69,8 +72,10 @@ public class ChatParsingService {
     public static class ChatParsingResult {
         private int playersConfirmed = 0;
         private int paymentsRegistered = 0;
+        private int attendanceMarked = 0; // Nuevo: cantidad de asistencias marcadas masivamente
         private List<String> confirmedPlayers = new ArrayList<>();
         private List<String> paidPlayers = new ArrayList<>();
+        private List<String> attendanceMarkedPlayers = new ArrayList<>(); // Nuevo: jugadores con asistencia marcada
         private List<String> unrecognizedMessages = new ArrayList<>();
         private List<String> newPlayersAdded = new ArrayList<>();
         
@@ -79,10 +84,14 @@ public class ChatParsingService {
         public void setPlayersConfirmed(int playersConfirmed) { this.playersConfirmed = playersConfirmed; }
         public int getPaymentsRegistered() { return paymentsRegistered; }
         public void setPaymentsRegistered(int paymentsRegistered) { this.paymentsRegistered = paymentsRegistered; }
+        public int getAttendanceMarked() { return attendanceMarked; }
+        public void setAttendanceMarked(int attendanceMarked) { this.attendanceMarked = attendanceMarked; }
         public List<String> getConfirmedPlayers() { return confirmedPlayers; }
         public void setConfirmedPlayers(List<String> confirmedPlayers) { this.confirmedPlayers = confirmedPlayers; }
         public List<String> getPaidPlayers() { return paidPlayers; }
         public void setPaidPlayers(List<String> paidPlayers) { this.paidPlayers = paidPlayers; }
+        public List<String> getAttendanceMarkedPlayers() { return attendanceMarkedPlayers; }
+        public void setAttendanceMarkedPlayers(List<String> attendanceMarkedPlayers) { this.attendanceMarkedPlayers = attendanceMarkedPlayers; }
         public List<String> getUnrecognizedMessages() { return unrecognizedMessages; }
         public void setUnrecognizedMessages(List<String> unrecognizedMessages) { this.unrecognizedMessages = unrecognizedMessages; }
         public List<String> getNewPlayersAdded() { return newPlayersAdded; }
@@ -90,18 +99,37 @@ public class ChatParsingService {
     }
     
     /**
-     * Procesa el texto del chat y extrae información de jugadores y pagos
+     * Procesa el texto del chat y extrae información de jugadores, pagos y asistencias
      */
     @Transactional
-    public ChatParsingResult processChatText(String chatText) {
+    public ChatParsingResult processChatText(String chatText, User user) {
         ChatParsingResult result = new ChatParsingResult();
         if (chatText == null || chatText.trim().isEmpty()) {
             return result;
         }
-        // Dividir el texto en líneas
+        
+        // Primero, verificar si hay un comando de asistencia masiva en todo el texto
+        String normalizedText = chatText.toLowerCase().trim();
+        boolean hasMassAttendanceCommand = MASS_ATTENDANCE_PATTERN.matcher(normalizedText).find();
+        
+        // Si hay comando de asistencia masiva, procesar lista de jugadores
+        if (hasMassAttendanceCommand) {
+            List<String> playerNames = extractPlayerNamesFromList(chatText);
+            if (!playerNames.isEmpty()) {
+                markMassAttendance(playerNames, result, user);
+            }
+        }
+        
+        // Dividir el texto en líneas para procesamiento individual
         String[] lines = chatText.split("\\r?\\n");
         for (String line : lines) {
             if (line.trim().isEmpty()) continue;
+            
+            // Si esta línea ya fue procesada en asistencia masiva, saltarla
+            if (hasMassAttendanceCommand && isPlayerNameLine(line)) {
+                continue;
+            }
+            
             ParsedMessage parsed = extractNameAndMessage(line);
             String name = parsed != null ? parsed.name : null;
             String message = parsed != null ? parsed.message : line;
@@ -111,7 +139,7 @@ public class ChatParsingService {
             Matcher m1 = PAYMENT_WITH_NAME_PATTERN_1.matcher(message);
             if (m1.find()) {
                 String detectedName = m1.group(1).trim();
-                Player player = findOrCreatePlayer(detectedName, result);
+                Player player = findOrCreatePlayer(detectedName, result, user);
                 result.paidPlayers.add(player.getName());
                 result.paymentsRegistered++;
                 recognized = true;
@@ -120,32 +148,53 @@ public class ChatParsingService {
             Matcher m2 = PAYMENT_WITH_NAME_PATTERN_2.matcher(message);
             if (m2.find()) {
                 String detectedName = m2.group(2).trim();
-                Player player = findOrCreatePlayer(detectedName, result);
+                Player player = findOrCreatePlayer(detectedName, result, user);
                 result.paidPlayers.add(player.getName());
                 result.paymentsRegistered++;
                 recognized = true;
                 continue;
             }
 
-            // 2. Confirmaciones de asistencia o lista numerada
-            if (name != null && (isConfirmation(message) || message.isEmpty())) {
-                Player player = findOrCreatePlayer(name, result);
-                result.confirmedPlayers.add(player.getName());
-                result.playersConfirmed++;
+            // 2. Detectar listas de jugadores sin comando (solo agregar jugadores, NO marcar asistencia)
+            // Esto debe ir ANTES de las confirmaciones individuales para evitar marcar asistencia por error
+            if (isPlayerNameLine(line) && !hasMassAttendanceCommand) {
+                String playerName = extractPlayerNameFromLine(line);
+                if (playerName != null && !playerName.trim().isEmpty()) {
+                    // Solo agregar el jugador, NO marcar asistencia
+                    findOrCreatePlayer(playerName, result, user);
+                    recognized = true;
+                    continue;
+                }
+            }
+
+            // 3. Confirmaciones de asistencia individual (solo si hay mensaje de confirmación explícito)
+            // NO procesar si el mensaje está vacío (eso es solo una lista, no una confirmación)
+            if (name != null && isConfirmation(message) && !message.isEmpty()) {
+                Player player = findOrCreatePlayer(name, result, user);
+                // Marcar asistencia solo si hay confirmación explícita
+                try {
+                    playerService.markAttendance(player.getName(), true, user);
+                    result.confirmedPlayers.add(player.getName());
+                    result.playersConfirmed++;
+                } catch (Exception e) {
+                    // Si falla, solo agregar a confirmados sin marcar asistencia
+                    result.confirmedPlayers.add(player.getName());
+                    result.playersConfirmed++;
+                }
                 recognized = true;
                 continue;
             }
 
-            // 3. Pagos tradicionales (palabra clave, nombre del remitente)
+            // 4. Pagos tradicionales (palabra clave, nombre del remitente)
             if (name != null && isPayment(message)) {
-                Player player = findOrCreatePlayer(name, result);
+                Player player = findOrCreatePlayer(name, result, user);
                 result.paidPlayers.add(player.getName());
                 result.paymentsRegistered++;
                 recognized = true;
                 continue;
             }
 
-            // 4. No reconocido
+            // 5. No reconocido
             if (!recognized) {
                 result.unrecognizedMessages.add(line);
             }
@@ -186,14 +235,14 @@ public class ChatParsingService {
     /**
      * Busca un jugador existente o crea uno nuevo si no existe
      */
-    private Player findOrCreatePlayer(String name, ChatParsingResult result) {
+    private Player findOrCreatePlayer(String name, ChatParsingResult result, User user) {
         String cleanName = cleanPlayerName(name);
-        Optional<Player> playerOpt = playerRepository.findByNameIgnoreCaseAndActivoTrue(cleanName);
+        Optional<Player> playerOpt = playerRepository.findByNameIgnoreCaseAndActivoTrueAndUser(cleanName, user);
         if (playerOpt.isPresent()) {
             return playerOpt.get();
         } else {
             PlayerDTO dto = new PlayerDTO(cleanName, 5, "MED");
-            Player newPlayer = playerService.addPlayer(dto);
+            Player newPlayer = playerService.addPlayer(dto, user);
             result.getNewPlayersAdded().add(cleanName);
             return newPlayer;
         }
@@ -229,6 +278,143 @@ public class ChatParsingService {
      */
     private boolean isPayment(String message) {
         return PAYMENT_PATTERN.matcher(message).find();
+    }
+    
+    /**
+     * Extrae nombres de jugadores de una lista (formato: nombres separados por comas, saltos de línea, guiones, etc.)
+     */
+    private List<String> extractPlayerNamesFromList(String text) {
+        List<String> names = new ArrayList<>();
+        
+        // Dividir por líneas
+        String[] lines = text.split("\\r?\\n");
+        for (String line : lines) {
+            line = line.trim();
+            if (line.isEmpty()) continue;
+            
+            // Ignorar líneas con comandos de asistencia masiva
+            if (MASS_ATTENDANCE_PATTERN.matcher(line.toLowerCase()).find()) {
+                continue;
+            }
+            
+            // Intentar extraer nombres de diferentes formatos
+            
+            // Formato lista numerada: 1. Nombre, 2. Nombre
+            Matcher numberedMatcher = NUMBERED_LIST_PATTERN.matcher(line);
+            if (numberedMatcher.find()) {
+                String name = numberedMatcher.group(1).trim();
+                if (!name.isEmpty() && !isCommand(name)) {
+                    names.add(cleanPlayerName(name));
+                }
+                continue;
+            }
+            
+            // Formato con separadores: Nombre1, Nombre2, Nombre3
+            // o Nombre1 - Nombre2 - Nombre3
+            // o Nombre1 • Nombre2 • Nombre3
+            if (line.contains(",") || line.contains("-") || line.contains("•") || line.contains("*")) {
+                String[] parts = line.split("[,•*\\-]");
+                for (String part : parts) {
+                    String name = cleanPlayerName(part.trim());
+                    if (!name.isEmpty() && name.length() > 1 && !isCommand(name)) {
+                        names.add(name);
+                    }
+                }
+                continue;
+            }
+            
+            // Si es una línea simple con un nombre (sin formato especial)
+            String cleanName = cleanPlayerName(line);
+            if (!cleanName.isEmpty() && cleanName.length() > 1 && !isCommand(cleanName)) {
+                // Verificar que no sea un comando
+                if (!MASS_ATTENDANCE_PATTERN.matcher(cleanName.toLowerCase()).find()) {
+                    names.add(cleanName);
+                }
+            }
+        }
+        
+        return names;
+    }
+    
+    /**
+     * Verifica si una línea contiene un nombre de jugador (no un comando)
+     */
+    private boolean isPlayerNameLine(String line) {
+        String clean = line.trim().toLowerCase();
+        // Ignorar comandos
+        if (MASS_ATTENDANCE_PATTERN.matcher(clean).find()) {
+            return false;
+        }
+        if (PAYMENT_PATTERN.matcher(clean).find()) {
+            return false;
+        }
+        // Debe contener al menos una letra
+        return clean.matches(".*[a-záéíóúñ].*");
+    }
+    
+    /**
+     * Extrae el nombre de jugador de una línea
+     */
+    private String extractPlayerNameFromLine(String line) {
+        // Intentar formato numerado primero
+        Matcher numberedMatcher = NUMBERED_LIST_PATTERN.matcher(line);
+        if (numberedMatcher.find()) {
+            return numberedMatcher.group(1).trim();
+        }
+        
+        // Limpiar y devolver
+        return cleanPlayerName(line);
+    }
+    
+    /**
+     * Verifica si un texto es un comando (no un nombre de jugador)
+     */
+    private boolean isCommand(String text) {
+        String lower = text.toLowerCase().trim();
+        return MASS_ATTENDANCE_PATTERN.matcher(lower).find() ||
+               PAYMENT_PATTERN.matcher(lower).find() ||
+               CONFIRMATION_PATTERN.matcher(lower).find() ||
+               lower.length() < 2;
+    }
+    
+    /**
+     * Marca asistencia masiva para una lista de jugadores
+     */
+    private void markMassAttendance(List<String> playerNames, ChatParsingResult result, User user) {
+        for (String playerName : playerNames) {
+            if (playerName == null || playerName.trim().isEmpty()) {
+                continue;
+            }
+            
+            String cleanName = cleanPlayerName(playerName);
+            if (cleanName.isEmpty()) {
+                continue;
+            }
+            
+            try {
+                // Buscar jugador existente
+                Optional<Player> playerOpt = playerRepository.findByNameIgnoreCaseAndUser(cleanName, user);
+                Player player;
+                
+                if (playerOpt.isPresent()) {
+                    player = playerOpt.get();
+                } else {
+                    // Crear nuevo jugador si no existe
+                    PlayerDTO dto = new PlayerDTO(cleanName, 5, "MED");
+                    player = playerService.addPlayer(dto, user);
+                    result.getNewPlayersAdded().add(cleanName);
+                }
+                
+                // Marcar asistencia
+                playerService.markAttendance(player.getName(), true, user);
+                result.attendanceMarkedPlayers.add(player.getName());
+                result.attendanceMarked++;
+                
+            } catch (Exception e) {
+                // Si falla, agregar a no reconocidos
+                result.getUnrecognizedMessages().add("Error al marcar asistencia de: " + cleanName);
+            }
+        }
     }
     
     /**

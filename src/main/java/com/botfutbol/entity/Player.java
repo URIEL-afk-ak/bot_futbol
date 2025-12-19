@@ -41,6 +41,10 @@ public class Player {
     @Column(name = "activo")
     private boolean activo = true; // Por defecto activo
 
+    @ManyToOne
+    @JoinColumn(name = "user_id")
+    private User user;
+
     public Player() {
         this.id = UUID.randomUUID().toString();
         this.skillLevel = 5; // Nivel medio por defecto
@@ -144,6 +148,14 @@ public class Player {
 
     public void setActivo(boolean activo) {
         this.activo = activo;
+    }
+
+    public User getUser() {
+        return user;
+    }
+
+    public void setUser(User user) {
+        this.user = user;
     }
 
     @Override

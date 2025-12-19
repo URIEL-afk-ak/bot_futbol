@@ -4,6 +4,7 @@ import com.botfutbol.dto.PlayerResponseDTO;
 import com.botfutbol.dto.TeamDTO;
 import com.botfutbol.entity.Player;
 import com.botfutbol.entity.Team;
+import com.botfutbol.entity.User;
 import com.botfutbol.repository.PlayerRepository;
 
 import org.springframework.stereotype.Service;
@@ -27,9 +28,9 @@ public class TeamService {
     /**
      * Genera dos equipos de forma aleatoria.
      */
-    public List<Team> generateRandomTeams() {
-        // Filtrar solo jugadores que asistieron
-        List<Player> allPlayers = playerRepository.findAll().stream()
+    public List<Team> generateRandomTeams(User user) {
+        // Filtrar solo jugadores que asistieron y pertenecen al usuario
+        List<Player> allPlayers = playerRepository.findByUser(user).stream()
                 .filter(Player::isAttended)
                 .collect(Collectors.toList());
         
@@ -67,9 +68,9 @@ public class TeamService {
     /**
      * Genera dos equipos balanceados por nivel de habilidad.
      */
-    public List<Team> generateBalancedTeams() {
-        // Filtrar solo jugadores que asistieron
-        List<Player> allPlayers = playerRepository.findAll().stream()
+    public List<Team> generateBalancedTeams(User user) {
+        // Filtrar solo jugadores que asistieron y pertenecen al usuario
+        List<Player> allPlayers = playerRepository.findByUser(user).stream()
                 .filter(Player::isAttended)
                 .collect(Collectors.toList());
         

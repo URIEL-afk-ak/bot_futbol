@@ -4,6 +4,7 @@ import com.botfutbol.dto.PlayerDTO;
 import com.botfutbol.dto.PlayerLevelHistoryDTO;
 import com.botfutbol.entity.Player;
 import com.botfutbol.entity.PlayerLevelHistory;
+import com.botfutbol.entity.User;
 import com.botfutbol.repository.PlayerLevelHistoryRepository;
 import com.botfutbol.repository.PlayerRepository;
 
@@ -35,7 +36,7 @@ public class PlayerService {
     /**
      * Agrega un nuevo jugador.
      */
-    public Player addPlayer(PlayerDTO playerDTO) {
+    public Player addPlayer(PlayerDTO playerDTO, User user) {
         Player player = new Player();
         player.setName(playerDTO.getName());
         player.setSkillLevel(playerDTO.getSkillLevel() != null ? playerDTO.getSkillLevel() : 5);
@@ -45,28 +46,29 @@ public class PlayerService {
         player.setGamesPlayed(0);
         player.setGoalsScored(0);
         player.setAttended(false);
+        player.setUser(user);
         return playerRepository.save(player);
     }
     
     /**
      * Busca un jugador por nombre.
      */
-    public Optional<Player> findPlayerByName(String name) {
-        return playerRepository.findByNameIgnoreCase(name);
+    public Optional<Player> findPlayerByName(String name, User user) {
+        return playerRepository.findByNameIgnoreCaseAndUser(name, user);
     }
     
     /**
      * Obtiene todos los jugadores.
      */
-    public List<Player> getAllPlayers() {
-        return playerRepository.findAll();
+    public List<Player> getAllPlayers(User user) {
+        return playerRepository.findByUser(user);
     }
     
     /**
      * Elimina un jugador por nombre.
      */
-    public boolean removePlayer(String name) {
-        Optional<Player> player = playerRepository.findByNameIgnoreCase(name);
+    public boolean removePlayer(String name, User user) {
+        Optional<Player> player = playerRepository.findByNameIgnoreCaseAndUser(name, user);
         if (player.isPresent()) {
             playerRepository.delete(player.get());
             return true;
@@ -77,12 +79,12 @@ public class PlayerService {
     /**
      * Actualiza el nivel de habilidad de un jugador.
      */
-    public Player updateSkillLevel(String name, int skillLevel) {
+    public Player updateSkillLevel(String name, int skillLevel, User user) {
         if (skillLevel < 1 || skillLevel > 10) {
             throw new IllegalArgumentException("El nivel de habilidad debe estar entre 1 y 10");
         }
 
-        Optional<Player> playerOpt = playerRepository.findByNameIgnoreCase(name);
+        Optional<Player> playerOpt = playerRepository.findByNameIgnoreCaseAndUser(name, user);
         if (playerOpt.isEmpty()) {
             throw new IllegalArgumentException("Jugador no encontrado");
         }
@@ -97,6 +99,7 @@ public class PlayerService {
             skillLevel,
             java.time.LocalDateTime.now()
         );
+        history.setUser(user);
         playerLevelHistoryRepository.save(history);
 
         player.setSkillLevel(skillLevel);
@@ -137,22 +140,22 @@ public class PlayerService {
     /**
      * Obtiene jugadores con deuda.
      */
-    public List<Player> getPlayersWithDebt() {
-        return playerRepository.findPlayersWithDebt();
+    public List<Player> getPlayersWithDebt(User user) {
+        return playerRepository.findPlayersWithDebtByUser(user);
     }
     
     /**
      * Obtiene los mejores goleadores.
      */
-    public List<Player> getTopScorers(int limit) {
-        return playerRepository.findTop10ByOrderByGoalsScoredDesc();
+    public List<Player> getTopScorers(int limit, User user) {
+        return playerRepository.findTop10ByUserOrderByGoalsScoredDesc(user);
     }
     
     /**
      * Marca la asistencia de un jugador.
      */
-    public void markAttendance(String playerName, boolean attended) {
-        Optional<Player> playerOpt = playerRepository.findByNameIgnoreCase(playerName);
+    public void markAttendance(String playerName, boolean attended, User user) {
+        Optional<Player> playerOpt = playerRepository.findByNameIgnoreCaseAndUser(playerName, user);
         if (playerOpt.isEmpty()) {
             throw new IllegalArgumentException("Jugador no encontrado: " + playerName);
         }
@@ -163,43 +166,54 @@ public class PlayerService {
     }
     
     /**
+     * Desmarca la asistencia de todos los jugadores del usuario.
+     */
+    public int unmarkAllAttendance(User user) {
+        List<Player> players = playerRepository.findByUser(user);
+        int count = 0;
+        for (Player player : players) {
+            if (player.isAttended()) {
+                player.setAttended(false);
+                playerRepository.save(player);
+                count++;
+            }
+        }
+        return count;
+    }
+    
+    /**
      * Obtiene el historial de niveles de habilidad de los jugadores.
      */
-    public List<PlayerLevelHistoryDTO> getPlayerLevelHistory() {
+    public List<PlayerLevelHistoryDTO> getPlayerLevelHistory(User user) {
         List<PlayerLevelHistoryDTO> result = new ArrayList<>();
-        List<Player> players = playerRepository.findAllByActivoTrue();
+        List<Player> players = playerRepository.findAllByActivoTrueAndUser(user);
 
         for (Player player : players) {
+            // Filtrar historial por usuario
             List<PlayerLevelHistory> history = playerLevelHistoryRepository
-                .findByPlayerNameOrderByDateAsc(player.getName());
+                .findByPlayerNameAndUserOrderByDateAsc(player.getName(), user);
 
             int previousLevel;
             double averageLevel;
-            int suggestedLevel;
 
-            if (history.size() >= 2) {
-                // Nivel anterior: penúltimo cambio
-                previousLevel = history.get(history.size() - 2).getNewLevel();
-                // Promedio: todos los newLevel menos el último (actual)
-                averageLevel = history.subList(0, history.size() - 1)
-                    .stream()
+            if (history.size() >= 1) {
+                // Nivel anterior: previousLevel del último cambio (nivel antes del cambio actual)
+                previousLevel = history.get(history.size() - 1).getPreviousLevel();
+                // Promedio: promedio de todos los newLevel del historial (incluyendo el actual)
+                averageLevel = history.stream()
                     .mapToInt(PlayerLevelHistory::getNewLevel)
                     .average()
-                    .orElse(previousLevel);
-            } else if (history.size() == 1) {
-                previousLevel = history.get(0).getPreviousLevel();
-                averageLevel = history.get(0).getPreviousLevel();
+                    .orElse(player.getSkillLevel());
             } else {
+                // Si no hay historial, usar el nivel actual como referencia
                 previousLevel = player.getSkillLevel();
                 averageLevel = player.getSkillLevel();
             }
-            suggestedLevel = (int) Math.round(averageLevel);
 
             PlayerLevelHistoryDTO dto = new PlayerLevelHistoryDTO(
                 player.getName(),
                 previousLevel,
-                averageLevel,
-                suggestedLevel
+                averageLevel
             );
             result.add(dto);
         }

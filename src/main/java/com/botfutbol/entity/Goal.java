@@ -29,6 +29,10 @@ public class Goal {
     
     @Column(name = "match_id", nullable = false)
     private String matchId; // Identificador del partido
+
+    @ManyToOne
+    @JoinColumn(name = "user_id")
+    private User user;
     
     public Goal() {
         this.id = UUID.randomUUID().toString();
@@ -91,6 +95,14 @@ public class Goal {
     
     public void setMatchId(String matchId) {
         this.matchId = matchId;
+    }
+
+    public User getUser() {
+        return user;
+    }
+
+    public void setUser(User user) {
+        this.user = user;
     }
     
     @Override

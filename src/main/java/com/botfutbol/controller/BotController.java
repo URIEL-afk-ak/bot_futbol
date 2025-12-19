@@ -20,6 +20,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import jakarta.servlet.http.HttpServletRequest;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -63,29 +65,60 @@ public class BotController {
     // ==================== REST API ENDPOINTS ====================
     
     /**
+     * Método auxiliar para obtener el usuario del header
+     */
+    private User getUserFromRequest(HttpServletRequest request) {
+        String userIdStr = request.getHeader("X-User-Id");
+        if (userIdStr == null || userIdStr.trim().isEmpty()) {
+            throw new IllegalArgumentException("Usuario no autenticado. Header X-User-Id requerido.");
+        }
+        try {
+            Long userId = Long.parseLong(userIdStr);
+            User user = userService.findById(userId);
+            if (user == null) {
+                throw new IllegalArgumentException("Usuario no encontrado");
+            }
+            return user;
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("ID de usuario inválido");
+        }
+    }
+    
+    /**
      * Obtener todos los jugadores
      */
     @GetMapping("/players")
-    public ResponseEntity<List<Player>> getAllPlayers() {
-        return ResponseEntity.ok(playerService.getAllPlayers());
+    public ResponseEntity<List<Player>> getAllPlayers(HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            return ResponseEntity.ok(playerService.getAllPlayers(user));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new ArrayList<>());
+        }
     }
     
     /**
      * Agregar un jugador
      */
     @PostMapping("/player/add")
-    public ResponseEntity<String> addPlayerRest(@RequestBody PlayerDTO dto) {
-        Player player = playerService.addPlayer(dto);
-        return ResponseEntity.ok(String.format("Jugador agregado: %s", player.getName()));
+    public ResponseEntity<String> addPlayerRest(@RequestBody PlayerDTO dto, HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            Player player = playerService.addPlayer(dto, user);
+            return ResponseEntity.ok(String.format("Jugador agregado: %s", player.getName()));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(e.getMessage());
+        }
     }
     
     /**
      * Actualizar un jugador
      */
     @PutMapping("/player/update/{oldName}")
-    public ResponseEntity<String> updatePlayer(@PathVariable String oldName, @RequestBody PlayerDTO dto) {
+    public ResponseEntity<String> updatePlayer(@PathVariable String oldName, @RequestBody PlayerDTO dto, HttpServletRequest request) {
         try {
-            Optional<Player> playerOpt = playerService.findPlayerByName(oldName);
+            User user = getUserFromRequest(request);
+            Optional<Player> playerOpt = playerService.findPlayerByName(oldName, user);
             if (playerOpt.isEmpty()) {
                 return ResponseEntity.badRequest().body("Jugador no encontrado: " + oldName);
             }
@@ -96,6 +129,8 @@ public class BotController {
             // NO toques player.setAttended(...) aquí, así se mantiene igual
             playerService.updatePlayer(player);
             return ResponseEntity.ok(String.format("Jugador actualizado: %s", player.getName()));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(e.getMessage());
         } catch (Exception e) {
             return ResponseEntity.badRequest().body("Error al actualizar: " + e.getMessage());
         }
@@ -105,29 +140,40 @@ public class BotController {
      * Eliminar un jugador
      */
     @DeleteMapping("/player/delete/{name}")
-    public ResponseEntity<String> deletePlayer(@PathVariable String name) {
-        boolean removed = playerService.removePlayer(name);
-        if (removed) {
-            return ResponseEntity.ok("Jugador eliminado: " + name);
+    public ResponseEntity<String> deletePlayer(@PathVariable String name, HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            boolean removed = playerService.removePlayer(name, user);
+            if (removed) {
+                return ResponseEntity.ok("Jugador eliminado: " + name);
+            }
+            return ResponseEntity.badRequest().body("Jugador no encontrado: " + name);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(e.getMessage());
         }
-        return ResponseEntity.badRequest().body("Jugador no encontrado: " + name);
     }
     
     /**
      * Obtener jugadores con deuda
      */
     @GetMapping("/players/debt")
-    public ResponseEntity<List<Player>> getPlayersWithDebt() {
-        return ResponseEntity.ok(playerService.getPlayersWithDebt());
+    public ResponseEntity<List<Player>> getPlayersWithDebt(HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            return ResponseEntity.ok(playerService.getPlayersWithDebt(user));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new ArrayList<>());
+        }
     }
     
     /**
      * Marcar asistencia de un jugador
      */
     @PutMapping("/player/attendance/{name}")
-    public ResponseEntity<String> markAttendance(@PathVariable String name, @RequestParam boolean attended) {
+    public ResponseEntity<String> markAttendance(@PathVariable String name, @RequestParam boolean attended, HttpServletRequest request) {
         try {
-            Optional<Player> playerOpt = playerService.findPlayerByName(name);
+            User user = getUserFromRequest(request);
+            Optional<Player> playerOpt = playerService.findPlayerByName(name, user);
             if (playerOpt.isEmpty()) {
                 return ResponseEntity.badRequest().body("Jugador no encontrado: " + name);
             }
@@ -135,6 +181,8 @@ public class BotController {
             player.setAttended(attended);
             playerService.updatePlayer(player);
             return ResponseEntity.ok(String.format("Asistencia actualizada: %s", name));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(e.getMessage());
         } catch (Exception e) {
             return ResponseEntity.badRequest().body("Error: " + e.getMessage());
         }
@@ -144,76 +192,115 @@ public class BotController {
      * Generar equipos aleatorios
      */
     @PostMapping("/teams/random")
-    public ResponseEntity<Map<String, TeamDTO>> generateRandomTeamsRest() {
-        List<Team> teams = teamService.generateRandomTeams();
-        List<TeamDTO> dtos = teamService.convertToDTOs(teams);
-        
-        Map<String, TeamDTO> response = new HashMap<>();
-        response.put("teamA", dtos.get(0));
-        response.put("teamB", dtos.get(1));
-        
-        return ResponseEntity.ok(response);
+    public ResponseEntity<Map<String, TeamDTO>> generateRandomTeamsRest(HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            List<Team> teams = teamService.generateRandomTeams(user);
+            List<TeamDTO> dtos = teamService.convertToDTOs(teams);
+            
+            Map<String, TeamDTO> response = new HashMap<>();
+            response.put("teamA", dtos.get(0));
+            response.put("teamB", dtos.get(1));
+            
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
     }
     
     /**
      * Generar equipos balanceados
      */
     @PostMapping("/teams/balanced")
-    public ResponseEntity<Map<String, TeamDTO>> generateBalancedTeamsRest() {
-        List<Team> teams = teamService.generateBalancedTeams();
-        List<TeamDTO> dtos = teamService.convertToDTOs(teams);
-        
-        Map<String, TeamDTO> response = new HashMap<>();
-        response.put("teamA", dtos.get(0));
-        response.put("teamB", dtos.get(1));
-        
-        return ResponseEntity.ok(response);
+    public ResponseEntity<Map<String, TeamDTO>> generateBalancedTeamsRest(HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            List<Team> teams = teamService.generateBalancedTeams(user);
+            List<TeamDTO> dtos = teamService.convertToDTOs(teams);
+            
+            Map<String, TeamDTO> response = new HashMap<>();
+            response.put("teamA", dtos.get(0));
+            response.put("teamB", dtos.get(1));
+            
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
     }
     
     /**
      * Registrar un gol
      */
     @PostMapping("/goal/record/{playerName}")
-    public ResponseEntity<String> recordGoalRest(@PathVariable String playerName) {
-        // Por defecto registra en equipo A, el frontend puede ampliarse para seleccionar equipo
-        GoalDTO dto = new GoalDTO(playerName, "A");
-        Goal goal = matchService.registerGoal(dto);
-        return ResponseEntity.ok(String.format("Gol registrado para %s", goal.getPlayerName()));
+    public ResponseEntity<String> recordGoalRest(@PathVariable String playerName, HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            // Por defecto registra en equipo A, el frontend puede ampliarse para seleccionar equipo
+            GoalDTO dto = new GoalDTO(playerName, "A");
+            Goal goal = matchService.registerGoal(dto, user);
+            return ResponseEntity.ok(String.format("Gol registrado para %s", goal.getPlayerName()));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(e.getMessage());
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
     }
     
     /**
      * Obtener todos los goles
      */
     @GetMapping("/goals")
-    public ResponseEntity<List<Goal>> getAllGoals() {
-        return ResponseEntity.ok(matchService.getAllGoals());
+    public ResponseEntity<List<Goal>> getAllGoals(HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            return ResponseEntity.ok(matchService.getAllGoals(user));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new ArrayList<>());
+        }
     }
     
     /**
      * Registrar un pago
      */
     @PostMapping("/payment/record")
-    public ResponseEntity<String> recordPaymentRest(@RequestBody PaymentDTO dto) {
-        Payment payment = paymentService.registerPayment(dto);
-        double debt = paymentService.getPlayerDebt(payment.getPlayerName());
-        return ResponseEntity.ok(String.format("Pago registrado: $%.2f. Deuda restante: $%.2f", 
-                payment.getAmount(), debt));
+    public ResponseEntity<String> recordPaymentRest(@RequestBody PaymentDTO dto, HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            Payment payment = paymentService.registerPayment(dto, user);
+            double debt = paymentService.getPlayerDebt(payment.getPlayerName(), user);
+            return ResponseEntity.ok(String.format("Pago registrado: $%.2f. Deuda restante: $%.2f", 
+                    payment.getAmount(), debt));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(e.getMessage());
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
     }
     
     /**
      * Obtener todos los pagos
      */
     @GetMapping("/payments")
-    public ResponseEntity<List<Payment>> getAllPayments() {
-        return ResponseEntity.ok(paymentService.getAllPayments());
+    public ResponseEntity<List<Payment>> getAllPayments(HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            return ResponseEntity.ok(paymentService.getAllPayments(user));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new ArrayList<>());
+        }
     }
     
     /**
      * Obtener estadísticas generales
      */
     @GetMapping("/stats")
-    public ResponseEntity<StatsDTO> getStats() {
-        return ResponseEntity.ok(matchService.getStats());
+    public ResponseEntity<StatsDTO> getStats(HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            return ResponseEntity.ok(matchService.getStats(user));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
     }
     
     // ==================== COMANDO DE TEXTO ====================
@@ -223,32 +310,35 @@ public class BotController {
      * Retorna la respuesta formateada.
      */
     @PostMapping("/message")
-    public ResponseEntity<String> processMessage(@RequestBody String message) {
+    public ResponseEntity<String> processMessage(@RequestBody String message, HttpServletRequest request) {
         if (message == null || message.trim().isEmpty()) {
             return ResponseEntity.badRequest().body("❌ Comando vacío");
         }
         
-        message = message.trim();
-        String[] parts = message.split("\\s+");
-        String command = parts[0].toLowerCase();
-        
         try {
+            User user = getUserFromRequest(request);
+            message = message.trim();
+            String[] parts = message.split("\\s+");
+            String command = parts[0].toLowerCase();
+            
             String response = switch (command) {
-                case "/agregar", "/add" -> handleAddPlayer(parts);
-                case "/eliminar", "/remove" -> handleRemovePlayer(parts);
-                case "/lista", "/list" -> handleListPlayers();
-                case "/equipos", "/teams" -> handleGenerateTeams(parts);
-                case "/iniciar", "/start" -> handleStartMatch(parts);
-                case "/gol", "/goal" -> handleRegisterGoal(parts);
-                case "/resultado", "/score" -> handleGetScore();
-                case "/finalizar", "/end" -> handleEndMatch();
-                case "/pago", "/pay" -> handleRegisterPayment(parts);
-                case "/deuda", "/debt" -> handleCheckDebt(parts);
-                case "/stats", "/estadisticas" -> handleGetStats();
+                case "/agregar", "/add" -> handleAddPlayer(parts, user);
+                case "/eliminar", "/remove" -> handleRemovePlayer(parts, user);
+                case "/lista", "/list" -> handleListPlayers(user);
+                case "/equipos", "/teams" -> handleGenerateTeams(parts, user);
+                case "/iniciar", "/start" -> handleStartMatch(parts, user);
+                case "/gol", "/goal" -> handleRegisterGoal(parts, user);
+                case "/resultado", "/score" -> handleGetScore(user);
+                case "/finalizar", "/end" -> handleEndMatch(user);
+                case "/pago", "/pay" -> handleRegisterPayment(parts, user);
+                case "/deuda", "/debt" -> handleCheckDebt(parts, user);
+                case "/stats", "/estadisticas" -> handleGetStats(user);
                 case "/ayuda", "/help" -> handleHelp();
                 default -> "❌ Comando no reconocido. Usa /ayuda para ver los comandos disponibles.";
             };
             return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("❌ Error: " + e.getMessage());
         } catch (Exception e) {
             return ResponseEntity.badRequest().body("❌ Error: " + e.getMessage());
         }
@@ -257,7 +347,7 @@ public class BotController {
     /**
      * /agregar Juan [nivel]
      */
-    private String handleAddPlayer(String[] parts) {
+    private String handleAddPlayer(String[] parts, User user) {
         if (parts.length < 2) {
             return "❌ Uso: /agregar <nombre> [nivel 1-10]";
         }
@@ -274,7 +364,7 @@ public class BotController {
         }
         
         PlayerDTO dto = new PlayerDTO(name, skillLevel);
-        Player player = playerService.addPlayer(dto);
+        Player player = playerService.addPlayer(dto, user);
         
         return String.format("✅ Jugador agregado: %s (Nivel: %d)", 
                 player.getName(), player.getSkillLevel());
@@ -283,13 +373,13 @@ public class BotController {
     /**
      * /eliminar Juan
      */
-    private String handleRemovePlayer(String[] parts) {
+    private String handleRemovePlayer(String[] parts, User user) {
         if (parts.length < 2) {
             return "❌ Uso: /eliminar <nombre>";
         }
         
         String name = parts[1];
-        boolean removed = playerService.removePlayer(name);
+        boolean removed = playerService.removePlayer(name, user);
         
         if (removed) {
             return "✅ Jugador eliminado: " + name;
@@ -301,8 +391,8 @@ public class BotController {
     /**
      * /lista
      */
-    private String handleListPlayers() {
-        List<Player> players = playerService.getAllPlayers();
+    private String handleListPlayers(User user) {
+        List<Player> players = playerService.getAllPlayers(user);
         
         if (players.isEmpty()) {
             return "📋 No hay jugadores registrados";
@@ -323,12 +413,12 @@ public class BotController {
     /**
      * /equipos [random|balanceado]
      */
-    private String handleGenerateTeams(String[] parts) {
+    private String handleGenerateTeams(String[] parts, User user) {
         boolean balanced = parts.length > 1 && parts[1].equalsIgnoreCase("balanceado");
         
         List<Team> teams = balanced ? 
-                teamService.generateBalancedTeams() : 
-                teamService.generateRandomTeams();
+                teamService.generateBalancedTeams(user) : 
+                teamService.generateRandomTeams(user);
         
         List<TeamDTO> teamDTOs = teamService.convertToDTOs(teams);
         
@@ -348,7 +438,7 @@ public class BotController {
     /**
      * /iniciar <costo>
      */
-    private String handleStartMatch(String[] parts) {
+    private String handleStartMatch(String[] parts, User user) {
         if (parts.length < 2) {
             return "❌ Uso: /iniciar <costo_por_jugador>";
         }
@@ -361,10 +451,10 @@ public class BotController {
         }
         
         // Generar equipos
-        List<Team> teams = teamService.generateBalancedTeams();
+        List<Team> teams = teamService.generateBalancedTeams(user);
         
         // Iniciar partido
-        matchService.startMatch(teams.get(0), teams.get(1), cost);
+        matchService.startMatch(teams.get(0), teams.get(1), cost, user);
         
         StringBuilder sb = new StringBuilder("🏁 ¡Partido iniciado!\n\n");
         sb.append(String.format("💰 Costo por jugador: $%.2f\n\n", cost));
@@ -376,7 +466,7 @@ public class BotController {
     /**
      * /gol Juan A
      */
-    private String handleRegisterGoal(String[] parts) {
+    private String handleRegisterGoal(String[] parts, User user) {
         if (parts.length < 3) {
             return "❌ Uso: /gol <jugador> <equipo: A o B>";
         }
@@ -389,9 +479,9 @@ public class BotController {
         }
         
         GoalDTO dto = new GoalDTO(playerName, teamId);
-        Goal goal = matchService.registerGoal(dto);
+        Goal goal = matchService.registerGoal(dto, user);
         
-        String score = matchService.getCurrentMatchScore();
+        String score = matchService.getCurrentMatchScore(user);
         
         return String.format("⚽ ¡GOL de %s!\n\n📊 %s", goal.getPlayerName(), score);
     }
@@ -399,24 +489,24 @@ public class BotController {
     /**
      * /resultado
      */
-    private String handleGetScore() {
-        String score = matchService.getCurrentMatchScore();
+    private String handleGetScore(User user) {
+        String score = matchService.getCurrentMatchScore(user);
         return "📊 " + score;
     }
     
     /**
      * /finalizar
      */
-    private String handleEndMatch() {
-        String score = matchService.getCurrentMatchScore();
-        matchService.endMatch();
+    private String handleEndMatch(User user) {
+        String score = matchService.getCurrentMatchScore(user);
+        matchService.endMatch(user);
         return "🏁 Partido finalizado\n\n📊 Resultado final: " + score;
     }
     
     /**
      * /pago Juan 1500 [concepto]
      */
-    private String handleRegisterPayment(String[] parts) {
+    private String handleRegisterPayment(String[] parts, User user) {
         if (parts.length < 3) {
             return "❌ Uso: /pago <jugador> <monto> [concepto]";
         }
@@ -433,9 +523,9 @@ public class BotController {
         String concept = parts.length > 3 ? String.join(" ", java.util.Arrays.copyOfRange(parts, 3, parts.length)) : null;
         
         PaymentDTO dto = new PaymentDTO(playerName, amount, concept);
-        Payment payment = paymentService.registerPayment(dto);
+        Payment payment = paymentService.registerPayment(dto, user);
         
-        double debt = paymentService.getPlayerDebt(playerName);
+        double debt = paymentService.getPlayerDebt(playerName, user);
         
         return String.format("✅ Pago registrado: %s pagó $%.2f\n💰 Deuda restante: $%.2f",
                 payment.getPlayerName(), payment.getAmount(), debt);
@@ -444,10 +534,10 @@ public class BotController {
     /**
      * /deuda [jugador]
      */
-    private String handleCheckDebt(String[] parts) {
+    private String handleCheckDebt(String[] parts, User user) {
         if (parts.length < 2) {
             // Mostrar todos los deudores
-            List<Player> debtors = playerService.getPlayersWithDebt();
+            List<Player> debtors = playerService.getPlayersWithDebt(user);
             
             if (debtors.isEmpty()) {
                 return "✅ No hay deudores";
@@ -462,7 +552,7 @@ public class BotController {
         } else {
             // Mostrar deuda de un jugador específico
             String playerName = parts[1];
-            double debt = paymentService.getPlayerDebt(playerName);
+            double debt = paymentService.getPlayerDebt(playerName, user);
             
             if (debt > 0) {
                 return String.format("💰 %s debe: $%.2f", playerName, debt);
@@ -475,8 +565,8 @@ public class BotController {
     /**
      * /stats
      */
-    private String handleGetStats() {
-        StatsDTO stats = matchService.getStats();
+    private String handleGetStats(User user) {
+        StatsDTO stats = matchService.getStats(user);
         
         StringBuilder sb = new StringBuilder("📊 Estadísticas:\n\n");
         
@@ -529,26 +619,31 @@ public class BotController {
      * Importar jugadores y pagos desde texto de chat de WhatsApp
      */
     @PostMapping("/matches/import-from-text")
-    public ResponseEntity<ChatParsingResponseDTO> importFromChat(@RequestBody Map<String, String> request) {
+    public ResponseEntity<ChatParsingResponseDTO> importFromChat(@RequestBody Map<String, String> request, HttpServletRequest httpRequest) {
         try {
+            User user = getUserFromRequest(httpRequest);
             String chatText = request.get("text");
             
             if (chatText == null || chatText.trim().isEmpty()) {
                 return ResponseEntity.badRequest().build();
             }
             
-            ChatParsingService.ChatParsingResult result = chatParsingService.processChatText(chatText);
+            ChatParsingService.ChatParsingResult result = chatParsingService.processChatText(chatText, user);
             
             // Convertir a DTO
             ChatParsingResponseDTO response = new ChatParsingResponseDTO();
             response.setPlayersConfirmed(result.getPlayersConfirmed());
             response.setPaymentsRegistered(result.getPaymentsRegistered());
+            response.setAttendanceMarked(result.getAttendanceMarked());
             response.setConfirmedPlayers(result.getConfirmedPlayers());
             response.setPaidPlayers(result.getPaidPlayers());
+            response.setAttendanceMarkedPlayers(result.getAttendanceMarkedPlayers());
             response.setUnrecognizedMessages(result.getUnrecognizedMessages());
             response.setNewPlayersAdded(result.getNewPlayersAdded());
             
             return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity.internalServerError().build();
@@ -559,10 +654,13 @@ public class BotController {
      * Obtener resumen del partido para compartir en WhatsApp
      */
     @GetMapping("/matches/{matchId}/summary")
-    public ResponseEntity<MatchSummaryDTO> getMatchSummary(@PathVariable String matchId) {
+    public ResponseEntity<MatchSummaryDTO> getMatchSummary(@PathVariable String matchId, HttpServletRequest request) {
         try {
-            MatchSummaryDTO summary = matchService.getMatchSummary(matchId);
+            User user = getUserFromRequest(request);
+            MatchSummaryDTO summary = matchService.getMatchSummary(matchId, user);
             return ResponseEntity.ok(summary);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         } catch (IllegalStateException e) {
             return ResponseEntity.notFound().build();
         } catch (Exception e) {
@@ -575,16 +673,19 @@ public class BotController {
      * Obtener resumen del partido activo actual
      */
     @GetMapping("/matches/current/summary")
-    public ResponseEntity<MatchSummaryDTO> getCurrentMatchSummary() {
+    public ResponseEntity<MatchSummaryDTO> getCurrentMatchSummary(HttpServletRequest request) {
         try {
-            Optional<com.botfutbol.entity.Match> currentMatch = matchService.getActiveMatch();
+            User user = getUserFromRequest(request);
+            Optional<com.botfutbol.entity.Match> currentMatch = matchService.getActiveMatch(user);
             
             if (currentMatch.isEmpty()) {
                 return ResponseEntity.notFound().build();
             }
             
-            MatchSummaryDTO summary = matchService.getMatchSummary(currentMatch.get().getId());
+            MatchSummaryDTO summary = matchService.getMatchSummary(currentMatch.get().getId(), user);
             return ResponseEntity.ok(summary);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity.internalServerError().build();
@@ -610,10 +711,13 @@ public class BotController {
      * Actualizar un pago
      */
     @PutMapping("/payment/update/{id}")
-    public ResponseEntity<?> updatePayment(@PathVariable String id, @RequestBody PaymentDTO dto) {
+    public ResponseEntity<?> updatePayment(@PathVariable String id, @RequestBody PaymentDTO dto, HttpServletRequest request) {
         try {
-            Payment updated = paymentService.updatePayment(id, dto);
+            User user = getUserFromRequest(request);
+            Payment updated = paymentService.updatePayment(id, dto, user);
             return ResponseEntity.ok(updated);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(e.getMessage());
         } catch (Exception e) {
             return ResponseEntity.status(404).body("Error al editar pago: " + e.getMessage());
         }
@@ -623,10 +727,13 @@ public class BotController {
      * Eliminar un pago
      */
     @DeleteMapping("/payment/delete/{id}")
-    public ResponseEntity<?> deletePayment(@PathVariable String id) {
+    public ResponseEntity<?> deletePayment(@PathVariable String id, HttpServletRequest request) {
         try {
-            paymentService.deletePayment(id);
+            User user = getUserFromRequest(request);
+            paymentService.deletePayment(id, user);
             return ResponseEntity.ok("Pago eliminado");
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(e.getMessage());
         } catch (Exception e) {
             return ResponseEntity.status(404).body("Error al eliminar pago: " + e.getMessage());
         }
@@ -636,62 +743,74 @@ public class BotController {
      * Obtener historial de niveles de jugadores
      */
     @GetMapping("/player-level-history")
-    public List<PlayerLevelHistoryDTO> getPlayerLevelHistory() {
-        List<PlayerLevelHistoryDTO> result = new ArrayList<>();
-        List<Player> players = playerService.getAllPlayers();
-
-        for (Player player : players) {
-            List<PlayerLevelHistory> history = playerLevelHistoryRepository.findByPlayerNameOrderByDateAsc(player.getName());
-
-            int previousLevel = player.getSkillLevel();
-            double averageLevel = player.getSkillLevel();
-            int suggestedLevel = player.getSkillLevel();
-
-            if (!history.isEmpty()) {
-                // Nivel anterior: penúltimo cambio, o el primero si solo hay uno
-                previousLevel = history.size() > 1
-                    ? history.get(history.size() - 2).getNewLevel()
-                    : history.get(0).getPreviousLevel();
-
-                // Promedio: de todos los newLevel históricos
-                averageLevel = history.stream().mapToInt(PlayerLevelHistory::getNewLevel).average().orElse(player.getSkillLevel());
-
-                // Nivel sugerido: redondeo del promedio
-                suggestedLevel = (int) Math.round(averageLevel);
-            }
-
-            PlayerLevelHistoryDTO dto = new PlayerLevelHistoryDTO(
-                player.getName(),
-                previousLevel,
-                averageLevel,
-                suggestedLevel
-            );
-            result.add(dto);
+    public ResponseEntity<List<PlayerLevelHistoryDTO>> getPlayerLevelHistory(HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            List<PlayerLevelHistoryDTO> result = playerService.getPlayerLevelHistory(user);
+            return ResponseEntity.ok(result);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new ArrayList<>());
         }
-        return result;
     }
 
     /**
      * Eliminar todos los pagos
      */
     @DeleteMapping("/payments/reset")
-    public ResponseEntity<?> resetAllPayments() {
-        paymentService.deleteAllPayments();
-        return ResponseEntity.ok("Todos los pagos eliminados");
+    public ResponseEntity<?> resetAllPayments(HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            paymentService.deleteAllPayments(user);
+            return ResponseEntity.ok("Todos los pagos eliminados");
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(e.getMessage());
+        }
+    }
+
+    /**
+     * Desmarcar asistencia de todos los jugadores
+     */
+    @PutMapping("/players/unmark-all-attendance")
+    public ResponseEntity<Map<String, Object>> unmarkAllAttendance(HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            int count = playerService.unmarkAllAttendance(user);
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", String.format("Asistencia desmarcada para %d jugador(es)", count));
+            response.put("count", count);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+        }
     }
 
     /**
      * Login de usuario
      */
     @PostMapping("/login")
-    public ResponseEntity<String> login(@RequestBody UserDTO loginData) {
+    public ResponseEntity<Map<String, Object>> login(@RequestBody UserDTO loginData) {
         String email = loginData.getEmail();
         String password = loginData.getPassword();
         User user = userService.findByEmail(email);
-        if (user != null && user.getPassword().equals(password)) {
-            return ResponseEntity.ok("Login exitoso");
+        
+        if (user != null && userService.checkPassword(password, user.getPassword())) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Login exitoso");
+            response.put("userId", user.getId());
+            response.put("nombre", user.getNombre());
+            response.put("apellido", user.getApellido());
+            response.put("email", user.getEmail());
+            return ResponseEntity.ok(response);
         } else {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Credenciales inválidas");
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Credenciales inválidas");
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
         }
     }
 
@@ -699,14 +818,51 @@ public class BotController {
      * Registro de usuario
      */
     @PostMapping("/register")
-    public ResponseEntity<String> register(@RequestBody UserDTO userDTO) {
-        if (userService.findByEmail(userDTO.getEmail()) != null) {
-            return ResponseEntity.status(HttpStatus.CONFLICT).body("El email ya está registrado");
+    public ResponseEntity<Map<String, Object>> register(@RequestBody UserDTO userDTO) {
+        // Validar campos requeridos
+        if (userDTO.getNombre() == null || userDTO.getNombre().trim().isEmpty()) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "El nombre es requerido");
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
         }
+        if (userDTO.getApellido() == null || userDTO.getApellido().trim().isEmpty()) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "El apellido es requerido");
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        }
+        if (userDTO.getEmail() == null || userDTO.getEmail().trim().isEmpty()) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "El email es requerido");
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        }
+        if (userDTO.getPassword() == null || userDTO.getPassword().trim().isEmpty()) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "La contraseña es requerida");
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        }
+        
+        if (userService.findByEmail(userDTO.getEmail()) != null) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "El email ya está registrado");
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
+        }
+        
         User user = new User();
-        user.setEmail(userDTO.getEmail());
-        user.setPassword(userDTO.getPassword()); // Para producción, usa hash
+        user.setNombre(userDTO.getNombre().trim());
+        user.setApellido(userDTO.getApellido().trim());
+        user.setEmail(userDTO.getEmail().trim().toLowerCase());
+        user.setPassword(userDTO.getPassword()); // El servicio lo hasheará automáticamente
         userService.save(user);
-        return ResponseEntity.ok("Usuario registrado exitosamente");
+        
+        Map<String, Object> response = new HashMap<>();
+        response.put("success", true);
+        response.put("message", "Usuario registrado exitosamente");
+        response.put("userId", user.getId());
+        return ResponseEntity.ok(response);
     }
 }

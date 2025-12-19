@@ -30,6 +30,10 @@ public class Payment {
     @Column(length = 200)
     private String concept; // Ej: "Pago partido 15/12", "Adelanto"
     
+    @ManyToOne
+    @JoinColumn(name = "user_id")
+    private User user;
+    
     public Payment() {
         this.id = UUID.randomUUID().toString();
         this.timestamp = LocalDateTime.now();
@@ -95,6 +99,14 @@ public class Payment {
     
     public void setConcept(String concept) {
         this.concept = concept;
+    }
+    
+    public User getUser() {
+        return user;
+    }
+    
+    public void setUser(User user) {
+        this.user = user;
     }
     
     @Override

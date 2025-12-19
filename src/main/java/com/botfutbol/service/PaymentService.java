@@ -3,6 +3,7 @@ package com.botfutbol.service;
 import com.botfutbol.dto.PaymentDTO;
 import com.botfutbol.entity.Payment;
 import com.botfutbol.entity.Player;
+import com.botfutbol.entity.User;
 import com.botfutbol.repository.PaymentRepository;
 import com.botfutbol.repository.PlayerRepository;
 
@@ -31,7 +32,7 @@ public class PaymentService {
     /**
      * Registra un pago de un jugador.
      */
-    public Payment registerPayment(PaymentDTO paymentDTO) {
+    public Payment registerPayment(PaymentDTO paymentDTO, User user) {
         // Validar datos
         if (paymentDTO.getPlayerName() == null || paymentDTO.getPlayerName().trim().isEmpty()) {
             throw new IllegalArgumentException("El nombre del jugador no puede estar vacío");
@@ -42,7 +43,7 @@ public class PaymentService {
         }
         
         // Buscar el jugador
-        Optional<Player> playerOpt = playerRepository.findByNameIgnoreCase(paymentDTO.getPlayerName());
+        Optional<Player> playerOpt = playerRepository.findByNameIgnoreCaseAndUser(paymentDTO.getPlayerName(), user);
         if (playerOpt.isEmpty()) {
             throw new IllegalArgumentException("Jugador no encontrado: " + paymentDTO.getPlayerName());
         }
@@ -56,6 +57,7 @@ public class PaymentService {
                 paymentDTO.getAmount(),
                 paymentDTO.getConcept()
         );
+        payment.setUser(user);
         
         // Actualizar total pagado del jugador
         player.setTotalPaid(player.getTotalPaid() + paymentDTO.getAmount());
@@ -79,15 +81,15 @@ public class PaymentService {
     /**
      * Obtiene todos los pagos de un jugador.
      */
-    public List<Payment> getPaymentsByPlayer(String playerName) {
-        return paymentRepository.findByPlayerNameIgnoreCase(playerName);
+    public List<Payment> getPaymentsByPlayer(String playerName, User user) {
+        return paymentRepository.findByPlayerNameIgnoreCaseAndUser(playerName, user);
     }
     
     /**
      * Calcula el balance (deuda - pagado) de un jugador.
      */
-    public double getPlayerBalance(String playerName) {
-        Optional<Player> playerOpt = playerRepository.findByNameIgnoreCase(playerName);
+    public double getPlayerBalance(String playerName, User user) {
+        Optional<Player> playerOpt = playerRepository.findByNameIgnoreCaseAndUser(playerName, user);
         if (playerOpt.isEmpty()) {
             throw new IllegalArgumentException("Jugador no encontrado");
         }
@@ -99,31 +101,36 @@ public class PaymentService {
     /**
      * Obtiene la deuda pendiente de un jugador.
      */
-    public double getPlayerDebt(String playerName) {
-        double balance = getPlayerBalance(playerName);
+    public double getPlayerDebt(String playerName, User user) {
+        double balance = getPlayerBalance(playerName, user);
         return balance < 0 ? Math.abs(balance) : 0;
     }
     
     /**
      * Obtiene todos los pagos registrados.
      */
-    public List<Payment> getAllPayments() {
-        return paymentRepository.findAll();
+    public List<Payment> getAllPayments(User user) {
+        return paymentRepository.findByUser(user);
     }
 
     /**
      * Edita un pago existente.
      */
-    public Payment updatePayment(String id, PaymentDTO dto) {
+    public Payment updatePayment(String id, PaymentDTO dto, User user) {
         Optional<Payment> optionalPayment = paymentRepository.findById(id);
         if (optionalPayment.isPresent()) {
             Payment payment = optionalPayment.get();
+            // Verificar que el pago pertenece al usuario
+            if (payment.getUser() == null || !payment.getUser().getId().equals(user.getId())) {
+                throw new RuntimeException("Pago no encontrado o no autorizado");
+            }
+            
             double oldAmount = payment.getAmount();
             payment.setAmount(dto.getAmount());
-            payment.setConcept(dto.getConcept()); // Usar setConcept, no setDescription
+            payment.setConcept(dto.getConcept());
 
             // Actualizar total pagado del jugador si cambió el monto
-            Optional<Player> playerOpt = playerRepository.findByNameIgnoreCase(payment.getPlayerName());
+            Optional<Player> playerOpt = playerRepository.findByNameIgnoreCaseAndUser(payment.getPlayerName(), user);
             if (playerOpt.isPresent()) {
                 Player player = playerOpt.get();
                 player.setTotalPaid(player.getTotalPaid() - oldAmount + dto.getAmount());
@@ -139,8 +146,14 @@ public class PaymentService {
     /**
      * Elimina un pago existente.
      */
-    public void deletePayment(String id) {
-        if (paymentRepository.existsById(id)) {
+    public void deletePayment(String id, User user) {
+        Optional<Payment> paymentOpt = paymentRepository.findById(id);
+        if (paymentOpt.isPresent()) {
+            Payment payment = paymentOpt.get();
+            // Verificar que el pago pertenece al usuario
+            if (payment.getUser() == null || !payment.getUser().getId().equals(user.getId())) {
+                throw new RuntimeException("Pago no encontrado o no autorizado");
+            }
             paymentRepository.deleteById(id);
         } else {
             throw new RuntimeException("Pago no encontrado");
@@ -148,9 +161,10 @@ public class PaymentService {
     }
 
     /**
-     * Elimina todos los pagos registrados.
+     * Elimina todos los pagos registrados del usuario.
      */
-    public void deleteAllPayments() {
-        paymentRepository.deleteAll();
+    public void deleteAllPayments(User user) {
+        List<Payment> payments = paymentRepository.findByUser(user);
+        paymentRepository.deleteAll(payments);
     }
 }

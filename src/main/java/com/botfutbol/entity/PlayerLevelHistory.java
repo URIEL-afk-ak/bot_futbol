@@ -15,6 +15,10 @@ public class PlayerLevelHistory {
     private int newLevel;
     private LocalDateTime date;
 
+    @ManyToOne
+    @JoinColumn(name = "user_id")
+    private User user;
+
     public PlayerLevelHistory() {}
 
     public PlayerLevelHistory(String playerName, int previousLevel, int newLevel, LocalDateTime date) {
@@ -30,9 +34,11 @@ public class PlayerLevelHistory {
     public int getPreviousLevel() { return previousLevel; }
     public int getNewLevel() { return newLevel; }
     public LocalDateTime getDate() { return date; }
+    public User getUser() { return user; }
     public void setId(Long id) { this.id = id; }
     public void setPlayerName(String playerName) { this.playerName = playerName; }
     public void setPreviousLevel(int previousLevel) { this.previousLevel = previousLevel; }
     public void setNewLevel(int newLevel) { this.newLevel = newLevel; }
     public void setDate(LocalDateTime date) { this.date = date; }
+    public void setUser(User user) { this.user = user; }
 }
