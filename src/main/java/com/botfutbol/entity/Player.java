@@ -8,13 +8,16 @@ import java.util.UUID;
  * Almacena información básica del jugador como nombre, habilidad y estado de pago.
  */
 @Entity
-@Table(name = "players")
+@Table(
+    name = "players",
+    uniqueConstraints = @UniqueConstraint(name = "uk_player_name_user", columnNames = {"name", "user_id"})
+)
 public class Player {
 
     @Id
     private String id;
 
-    @Column(nullable = false, unique = true, length = 100)
+    @Column(nullable = false, length = 100)
     private String name;
 
     @Column(name = "skill_level")

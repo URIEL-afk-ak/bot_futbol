@@ -237,14 +237,41 @@ public class ChatParsingService {
      */
     private Player findOrCreatePlayer(String name, ChatParsingResult result, User user) {
         String cleanName = cleanPlayerName(name);
-        Optional<Player> playerOpt = playerRepository.findByNameIgnoreCaseAndActivoTrueAndUser(cleanName, user);
+        if (cleanName.isEmpty()) {
+            throw new IllegalArgumentException("Nombre de jugador inválido");
+        }
+        
+        // Buscar jugador existente (activo o inactivo) para este usuario
+        Optional<Player> playerOpt = playerRepository.findByNameIgnoreCaseAndUser(cleanName, user);
         if (playerOpt.isPresent()) {
-            return playerOpt.get();
+            Player player = playerOpt.get();
+            // Si está inactivo, reactivarlo
+            if (!player.isActivo()) {
+                player.setActivo(true);
+                playerRepository.save(player);
+            }
+            return player;
         } else {
-            PlayerDTO dto = new PlayerDTO(cleanName, 5, "MED");
-            Player newPlayer = playerService.addPlayer(dto, user);
-            result.getNewPlayersAdded().add(cleanName);
-            return newPlayer;
+            // Verificar una vez más antes de crear (para evitar race conditions)
+            playerOpt = playerRepository.findByNameIgnoreCaseAndUser(cleanName, user);
+            if (playerOpt.isPresent()) {
+                return playerOpt.get();
+            }
+            
+            // Crear nuevo jugador
+            try {
+                PlayerDTO dto = new PlayerDTO(cleanName, 5, "MED");
+                Player newPlayer = playerService.addPlayer(dto, user);
+                result.getNewPlayersAdded().add(cleanName);
+                return newPlayer;
+            } catch (Exception e) {
+                // Si falla por duplicado, intentar buscar de nuevo
+                playerOpt = playerRepository.findByNameIgnoreCaseAndUser(cleanName, user);
+                if (playerOpt.isPresent()) {
+                    return playerOpt.get();
+                }
+                throw e;
+            }
         }
     }
     
@@ -392,17 +419,46 @@ public class ChatParsingService {
             }
             
             try {
-                // Buscar jugador existente
+                // Buscar jugador existente (activo o inactivo)
                 Optional<Player> playerOpt = playerRepository.findByNameIgnoreCaseAndUser(cleanName, user);
                 Player player;
                 
                 if (playerOpt.isPresent()) {
                     player = playerOpt.get();
+                    // Si está inactivo, reactivarlo
+                    if (!player.isActivo()) {
+                        player.setActivo(true);
+                        playerRepository.save(player);
+                    }
                 } else {
-                    // Crear nuevo jugador si no existe
-                    PlayerDTO dto = new PlayerDTO(cleanName, 5, "MED");
-                    player = playerService.addPlayer(dto, user);
-                    result.getNewPlayersAdded().add(cleanName);
+                    // Verificar una vez más antes de crear (para evitar race conditions)
+                    playerOpt = playerRepository.findByNameIgnoreCaseAndUser(cleanName, user);
+                    if (playerOpt.isPresent()) {
+                        player = playerOpt.get();
+                        if (!player.isActivo()) {
+                            player.setActivo(true);
+                            playerRepository.save(player);
+                        }
+                    } else {
+                        // Crear nuevo jugador si no existe
+                        try {
+                            PlayerDTO dto = new PlayerDTO(cleanName, 5, "MED");
+                            player = playerService.addPlayer(dto, user);
+                            result.getNewPlayersAdded().add(cleanName);
+                        } catch (Exception e) {
+                            // Si falla por duplicado, intentar buscar de nuevo
+                            playerOpt = playerRepository.findByNameIgnoreCaseAndUser(cleanName, user);
+                            if (playerOpt.isPresent()) {
+                                player = playerOpt.get();
+                                if (!player.isActivo()) {
+                                    player.setActivo(true);
+                                    playerRepository.save(player);
+                                }
+                            } else {
+                                throw e;
+                            }
+                        }
+                    }
                 }
                 
                 // Marcar asistencia
@@ -412,7 +468,7 @@ public class ChatParsingService {
                 
             } catch (Exception e) {
                 // Si falla, agregar a no reconocidos
-                result.getUnrecognizedMessages().add("Error al marcar asistencia de: " + cleanName);
+                result.getUnrecognizedMessages().add("Error al marcar asistencia de: " + cleanName + " - " + e.getMessage());
             }
         }
     }
