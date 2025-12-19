@@ -23,9 +23,12 @@ public class SecurityConfig {
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/bot/login", "/api/bot/register").permitAll()
-                .anyRequest().permitAll() // Permitir todas las peticiones (ajustar según necesidad)
-            );
+                // Permitir TODAS las peticiones sin autenticación a nivel de Spring Security
+                // La validación del X-User-Id se hace en el controlador, no aquí
+                .anyRequest().permitAll()
+            )
+            .httpBasic(basic -> basic.disable())
+            .formLogin(form -> form.disable());
         
         return http.build();
     }
@@ -34,9 +37,10 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOriginPatterns(Arrays.asList("*"));
-        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         configuration.setAllowedHeaders(Arrays.asList("*"));
-        configuration.setAllowCredentials(true);
+        configuration.setExposedHeaders(Arrays.asList("*"));
+        configuration.setAllowCredentials(false); // Cambiar a false cuando se usa *
         configuration.setMaxAge(3600L);
         
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
