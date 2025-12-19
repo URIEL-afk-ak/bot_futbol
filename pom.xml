@@ -40,7 +40,14 @@
 
        
 
-        <!-- PostgreSQL Driver (alternativa) -->
+        <!-- H2 Database (para desarrollo local) -->
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- PostgreSQL Driver (para producción) -->
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>

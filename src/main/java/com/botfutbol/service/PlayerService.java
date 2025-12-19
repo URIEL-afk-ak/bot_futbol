@@ -1,18 +1,13 @@
 package com.botfutbol.service;
 
 import com.botfutbol.dto.PlayerDTO;
-import com.botfutbol.dto.PlayerLevelHistoryDTO;
 import com.botfutbol.entity.Player;
-import com.botfutbol.entity.PlayerLevelHistory;
 import com.botfutbol.entity.User;
-import com.botfutbol.repository.PlayerLevelHistoryRepository;
 import com.botfutbol.repository.PlayerRepository;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -25,9 +20,6 @@ import java.util.Optional;
 public class PlayerService {
     
     private final PlayerRepository playerRepository;
-
-    @Autowired
-    private PlayerLevelHistoryRepository playerLevelHistoryRepository;
     
     public PlayerService(PlayerRepository playerRepository) {
         this.playerRepository = playerRepository;
@@ -90,18 +82,6 @@ public class PlayerService {
         }
 
         Player player = playerOpt.get();
-        int previousLevel = player.getSkillLevel();
-
-        // Guarda el historial antes de cambiar el nivel
-        PlayerLevelHistory history = new PlayerLevelHistory(
-            player.getName(),
-            previousLevel,
-            skillLevel,
-            java.time.LocalDateTime.now()
-        );
-        history.setUser(user);
-        playerLevelHistoryRepository.save(history);
-
         player.setSkillLevel(skillLevel);
         return playerRepository.save(player);
     }
@@ -181,42 +161,4 @@ public class PlayerService {
         return count;
     }
     
-    /**
-     * Obtiene el historial de niveles de habilidad de los jugadores.
-     */
-    public List<PlayerLevelHistoryDTO> getPlayerLevelHistory(User user) {
-        List<PlayerLevelHistoryDTO> result = new ArrayList<>();
-        List<Player> players = playerRepository.findAllByActivoTrueAndUser(user);
-
-        for (Player player : players) {
-            // Filtrar historial por usuario
-            List<PlayerLevelHistory> history = playerLevelHistoryRepository
-                .findByPlayerNameAndUserOrderByDateAsc(player.getName(), user);
-
-            int previousLevel;
-            double averageLevel;
-
-            if (history.size() >= 1) {
-                // Nivel anterior: previousLevel del último cambio (nivel antes del cambio actual)
-                previousLevel = history.get(history.size() - 1).getPreviousLevel();
-                // Promedio: promedio de todos los newLevel del historial (incluyendo el actual)
-                averageLevel = history.stream()
-                    .mapToInt(PlayerLevelHistory::getNewLevel)
-                    .average()
-                    .orElse(player.getSkillLevel());
-            } else {
-                // Si no hay historial, usar el nivel actual como referencia
-                previousLevel = player.getSkillLevel();
-                averageLevel = player.getSkillLevel();
-            }
-
-            PlayerLevelHistoryDTO dto = new PlayerLevelHistoryDTO(
-                player.getName(),
-                previousLevel,
-                averageLevel
-            );
-            result.add(dto);
-        }
-        return result;
-    }
 }

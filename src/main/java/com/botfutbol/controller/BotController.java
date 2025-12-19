@@ -5,7 +5,6 @@ import com.botfutbol.entity.Goal;
 import com.botfutbol.entity.Payment;
 import com.botfutbol.entity.Player;
 import com.botfutbol.entity.Team;
-import com.botfutbol.entity.PlayerLevelHistory;
 import com.botfutbol.entity.User;
 import com.botfutbol.service.ChatParsingService;
 import com.botfutbol.service.MatchService;
@@ -13,7 +12,6 @@ import com.botfutbol.service.PaymentService;
 import com.botfutbol.service.PlayerService;
 import com.botfutbol.service.TeamService;
 import com.botfutbol.service.UserService;
-import com.botfutbol.repository.PlayerLevelHistoryRepository;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -43,7 +41,6 @@ public class BotController {
     private final PaymentService paymentService;
     private final MatchService matchService;
     private final ChatParsingService chatParsingService;
-    private final PlayerLevelHistoryRepository playerLevelHistoryRepository;
     
     @Autowired
     private UserService userService;
@@ -52,14 +49,12 @@ public class BotController {
                          TeamService teamService,
                          PaymentService paymentService,
                          MatchService matchService,
-                         ChatParsingService chatParsingService,
-                         PlayerLevelHistoryRepository playerLevelHistoryRepository) {
+                         ChatParsingService chatParsingService) {
         this.playerService = playerService;
         this.teamService = teamService;
         this.paymentService = paymentService;
         this.matchService = matchService;
         this.chatParsingService = chatParsingService;
-        this.playerLevelHistoryRepository = playerLevelHistoryRepository;
     }
     
     // ==================== REST API ENDPOINTS ====================
@@ -73,14 +68,16 @@ public class BotController {
             throw new IllegalArgumentException("Usuario no autenticado. Header X-User-Id requerido.");
         }
         try {
-            Long userId = Long.parseLong(userIdStr);
+            Long userId = Long.parseLong(userIdStr.trim());
             User user = userService.findById(userId);
             if (user == null) {
-                throw new IllegalArgumentException("Usuario no encontrado");
+                throw new IllegalArgumentException("Usuario no encontrado con ID: " + userIdStr);
             }
             return user;
         } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("ID de usuario inválido");
+            throw new IllegalArgumentException("ID de usuario inválido: " + userIdStr);
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Error al obtener usuario: " + e.getMessage());
         }
     }
     
@@ -108,6 +105,10 @@ public class BotController {
             return ResponseEntity.ok(String.format("Jugador agregado: %s", player.getName()));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(e.getMessage());
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body("Error al agregar jugador: " + e.getMessage());
         }
     }
     
@@ -621,14 +622,24 @@ public class BotController {
     @PostMapping("/matches/import-from-text")
     public ResponseEntity<ChatParsingResponseDTO> importFromChat(@RequestBody Map<String, String> request, HttpServletRequest httpRequest) {
         try {
+            // Log para debugging
+            String userIdHeader = httpRequest.getHeader("X-User-Id");
+            System.out.println("DEBUG: X-User-Id header: " + userIdHeader);
+            
             User user = getUserFromRequest(httpRequest);
+            System.out.println("DEBUG: Usuario obtenido: " + user.getEmail() + " (ID: " + user.getId() + ")");
+            
             String chatText = request.get("text");
             
             if (chatText == null || chatText.trim().isEmpty()) {
-                return ResponseEntity.badRequest().build();
+                ChatParsingResponseDTO errorResponse = new ChatParsingResponseDTO();
+                errorResponse.setUnrecognizedMessages(List.of("El texto del chat está vacío"));
+                return ResponseEntity.badRequest().body(errorResponse);
             }
             
+            System.out.println("DEBUG: Procesando chat text de longitud: " + chatText.length());
             ChatParsingService.ChatParsingResult result = chatParsingService.processChatText(chatText, user);
+            System.out.println("DEBUG: Chat procesado exitosamente");
             
             // Convertir a DTO
             ChatParsingResponseDTO response = new ChatParsingResponseDTO();
@@ -643,10 +654,19 @@ public class BotController {
             
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        } catch (Exception e) {
+            System.err.println("ERROR IllegalArgumentException: " + e.getMessage());
             e.printStackTrace();
-            return ResponseEntity.internalServerError().build();
+            ChatParsingResponseDTO errorResponse = new ChatParsingResponseDTO();
+            errorResponse.setUnrecognizedMessages(List.of("Error de autenticación: " + e.getMessage()));
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(errorResponse);
+        } catch (Exception e) {
+            System.err.println("ERROR Exception: " + e.getClass().getName() + " - " + e.getMessage());
+            e.printStackTrace();
+            // Retornar un DTO con información del error
+            ChatParsingResponseDTO errorResponse = new ChatParsingResponseDTO();
+            String errorMessage = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+            errorResponse.setUnrecognizedMessages(List.of("Error al procesar chat: " + errorMessage));
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
         }
     }
     
@@ -742,16 +762,6 @@ public class BotController {
     /**
      * Obtener historial de niveles de jugadores
      */
-    @GetMapping("/player-level-history")
-    public ResponseEntity<List<PlayerLevelHistoryDTO>> getPlayerLevelHistory(HttpServletRequest request) {
-        try {
-            User user = getUserFromRequest(request);
-            List<PlayerLevelHistoryDTO> result = playerService.getPlayerLevelHistory(user);
-            return ResponseEntity.ok(result);
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new ArrayList<>());
-        }
-    }
 
     /**
      * Eliminar todos los pagos
@@ -864,5 +874,67 @@ public class BotController {
         response.put("message", "Usuario registrado exitosamente");
         response.put("userId", user.getId());
         return ResponseEntity.ok(response);
+    }
+    
+    /**
+     * Obtener información del usuario actual
+     */
+    @GetMapping("/user/profile")
+    public ResponseEntity<Map<String, Object>> getProfile(HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("id", user.getId());
+            response.put("nombre", user.getNombre());
+            response.put("apellido", user.getApellido());
+            response.put("email", user.getEmail());
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+        } catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Error al obtener perfil");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+    
+    /**
+     * Actualizar perfil del usuario
+     */
+    @PutMapping("/user/profile")
+    public ResponseEntity<Map<String, Object>> updateProfile(@RequestBody UserDTO userDTO, HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            User updatedUser = userService.updateProfile(
+                user.getId(),
+                userDTO.getNombre(),
+                userDTO.getApellido(),
+                userDTO.getEmail(),
+                userDTO.getPassword()
+            );
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Perfil actualizado exitosamente");
+            response.put("nombre", updatedUser.getNombre());
+            response.put("apellido", updatedUser.getApellido());
+            response.put("email", updatedUser.getEmail());
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        } catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Error al actualizar perfil");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
     }
 }
