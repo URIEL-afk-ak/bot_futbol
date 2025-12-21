@@ -4,6 +4,8 @@ import com.botfutbol.dto.PlayerDTO;
 import com.botfutbol.entity.Player;
 import com.botfutbol.entity.User;
 import com.botfutbol.repository.PlayerRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,6 +19,8 @@ import java.util.regex.Pattern;
  */
 @Service
 public class ChatParsingService {
+    
+    private static final Logger logger = LoggerFactory.getLogger(ChatParsingService.class);
     
     private final PlayerRepository playerRepository;
     private final PlayerService playerService;
@@ -262,25 +266,43 @@ public class ChatParsingService {
             try {
                 PlayerDTO dto = new PlayerDTO(cleanName, 5, "MED");
                 Player newPlayer = playerService.addPlayer(dto, user);
-                result.getNewPlayersAdded().add(cleanName);
+                // Solo agregar a newPlayersAdded si realmente es nuevo (no estaba inactivo)
+                if (!result.getNewPlayersAdded().contains(cleanName)) {
+                    result.getNewPlayersAdded().add(cleanName);
+                }
                 return newPlayer;
             } catch (Exception e) {
-                // Si falla por duplicado, intentar buscar de nuevo
+                // Si falla por cualquier razón (duplicado, constraint, etc.), intentar buscar de nuevo
+                logger.warn("Error al crear jugador '{}': {}. Buscando jugador existente.", cleanName, e.getMessage());
                 playerOpt = playerRepository.findByNameIgnoreCaseAndUser(cleanName, user);
                 if (playerOpt.isPresent()) {
-                    return playerOpt.get();
+                    Player existingPlayer = playerOpt.get();
+                    // Si está inactivo, reactivarlo
+                    if (!existingPlayer.isActivo()) {
+                        existingPlayer.setActivo(true);
+                        existingPlayer = playerRepository.save(existingPlayer);
+                    }
+                    return existingPlayer;
                 }
-                throw e;
+                // Si no se encuentra, relanzar el error original
+                throw new IllegalStateException("Error al crear jugador '" + cleanName + "': " + e.getMessage(), e);
             }
         }
     }
     
     /**
      * Limpia el nombre del jugador eliminando caracteres especiales
+     * IMPORTANTE: Normaliza a título (primera letra mayúscula) para consistencia
      */
     private String cleanPlayerName(String name) {
         if (name == null) return "";
-        return name.replaceAll("[^A-Za-zÀ-ÿ\\s]", "").replaceAll("\\s+", " ").trim();
+        String cleaned = name.replaceAll("[^A-Za-zÀ-ÿ\\s]", "").replaceAll("\\s+", " ").trim();
+        // Normalizar a título: primera letra mayúscula, resto minúsculas
+        if (cleaned.isEmpty()) return "";
+        if (cleaned.length() == 1) {
+            return cleaned.toUpperCase();
+        }
+        return cleaned.substring(0, 1).toUpperCase() + cleaned.substring(1).toLowerCase();
     }
     
     /**
@@ -444,18 +466,25 @@ public class ChatParsingService {
                         try {
                             PlayerDTO dto = new PlayerDTO(cleanName, 5, "MED");
                             player = playerService.addPlayer(dto, user);
-                            result.getNewPlayersAdded().add(cleanName);
+                            // Solo agregar a newPlayersAdded si realmente es nuevo
+                            if (!result.getNewPlayersAdded().contains(cleanName)) {
+                                result.getNewPlayersAdded().add(cleanName);
+                            }
                         } catch (Exception e) {
-                            // Si falla por duplicado, intentar buscar de nuevo
+                            // Si falla por cualquier razón, intentar buscar de nuevo
+                            logger.warn("Error al crear jugador '{}' en asistencia masiva: {}. Buscando jugador existente.", 
+                                    cleanName, e.getMessage());
                             playerOpt = playerRepository.findByNameIgnoreCaseAndUser(cleanName, user);
                             if (playerOpt.isPresent()) {
                                 player = playerOpt.get();
                                 if (!player.isActivo()) {
                                     player.setActivo(true);
-                                    playerRepository.save(player);
+                                    player = playerRepository.save(player);
                                 }
                             } else {
-                                throw e;
+                                // Si no se encuentra, continuar sin marcar asistencia para este jugador
+                                logger.error("No se pudo crear ni encontrar jugador '{}'. Omitiendo asistencia.", cleanName);
+                                continue;
                             }
                         }
                     }

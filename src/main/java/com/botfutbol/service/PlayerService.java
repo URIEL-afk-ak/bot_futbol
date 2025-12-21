@@ -39,8 +39,24 @@ public class PlayerService {
     public Player addPlayer(PlayerDTO playerDTO, User user) {
         logger.info("Agregando jugador: {} para usuario: {}", playerDTO.getName(), user.getId());
         
+        // Verificar si el jugador ya existe (case-insensitive)
+        Optional<Player> existingPlayer = playerRepository.findByNameIgnoreCaseAndUser(playerDTO.getName(), user);
+        if (existingPlayer.isPresent()) {
+            Player player = existingPlayer.get();
+            logger.warn("Jugador '{}' ya existe para usuario: {}. Retornando jugador existente.", 
+                    playerDTO.getName(), user.getId());
+            // Si está inactivo, reactivarlo
+            if (!player.isActivo()) {
+                player.setActivo(true);
+                player = playerRepository.save(player);
+            }
+            return player;
+        }
+        
         Player player = new Player();
-        player.setName(playerDTO.getName());
+        // Normalizar nombre: primera letra mayúscula, resto minúsculas
+        String normalizedName = normalizePlayerName(playerDTO.getName());
+        player.setName(normalizedName);
         player.setSkillLevel(playerDTO.getSkillLevel() != null ? 
                 playerDTO.getSkillLevel() : PlayerConstants.DEFAULT_SKILL_LEVEL);
         player.setPosition(playerDTO.getPosition() != null ? 
@@ -52,9 +68,39 @@ public class PlayerService {
         player.setAttended(PlayerConstants.DEFAULT_ATTENDED);
         player.setUser(user);
         
-        Player savedPlayer = playerRepository.save(player);
-        logger.info("Jugador agregado exitosamente con ID: {}", savedPlayer.getId());
-        return savedPlayer;
+        try {
+            Player savedPlayer = playerRepository.save(player);
+            logger.info("Jugador agregado exitosamente con ID: {}", savedPlayer.getId());
+            return savedPlayer;
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            // Si falla por duplicado (race condition), buscar y retornar el existente
+            logger.warn("Error de integridad al agregar jugador '{}'. Buscando jugador existente.", 
+                    playerDTO.getName());
+            Optional<Player> existing = playerRepository.findByNameIgnoreCaseAndUser(playerDTO.getName(), user);
+            if (existing.isPresent()) {
+                Player existingPlayer2 = existing.get();
+                if (!existingPlayer2.isActivo()) {
+                    existingPlayer2.setActivo(true);
+                    existingPlayer2 = playerRepository.save(existingPlayer2);
+                }
+                return existingPlayer2;
+            }
+            throw new IllegalStateException("Error al agregar jugador: ya existe un jugador con ese nombre", e);
+        }
+    }
+    
+    /**
+     * Normaliza el nombre del jugador (primera letra mayúscula, resto minúsculas)
+     */
+    private String normalizePlayerName(String name) {
+        if (name == null || name.trim().isEmpty()) {
+            return name;
+        }
+        String trimmed = name.trim();
+        if (trimmed.length() == 1) {
+            return trimmed.toUpperCase();
+        }
+        return trimmed.substring(0, 1).toUpperCase() + trimmed.substring(1).toLowerCase();
     }
     
     /**
