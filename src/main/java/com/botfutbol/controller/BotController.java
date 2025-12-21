@@ -844,7 +844,7 @@ public class BotController {
      * Login de usuario
      */
     @PostMapping("/login")
-    public ResponseEntity<Map<String, Object>> login(@Valid @RequestBody UserDTO loginData) {
+    public ResponseEntity<Map<String, Object>> login(@Valid @RequestBody com.botfutbol.dto.LoginDTO loginData) {
         String email = loginData.getEmail();
         String password = loginData.getPassword();
         User user = userService.findByEmail(email);
