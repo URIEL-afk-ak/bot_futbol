@@ -7,6 +7,8 @@ import com.botfutbol.entity.User;
 import com.botfutbol.repository.PaymentRepository;
 import com.botfutbol.repository.PlayerRepository;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,6 +23,8 @@ import java.util.Optional;
 @Transactional
 public class PaymentService {
     
+    private static final Logger logger = LoggerFactory.getLogger(PaymentService.class);
+    
     private final PaymentRepository paymentRepository;
     private final PlayerRepository playerRepository;
     
@@ -33,18 +37,20 @@ public class PaymentService {
      * Registra un pago de un jugador.
      */
     public Payment registerPayment(PaymentDTO paymentDTO, User user) {
-        // Validar datos
-        if (paymentDTO.getPlayerName() == null || paymentDTO.getPlayerName().trim().isEmpty()) {
-            throw new IllegalArgumentException("El nombre del jugador no puede estar vacío");
-        }
+        logger.info("Registrando pago de {} por ${} para usuario: {}", 
+                paymentDTO.getPlayerName(), paymentDTO.getAmount(), user.getId());
         
-        if (paymentDTO.getAmount() <= 0) {
+        // La validación de campos se hace automáticamente con @Valid en el controller
+        // Validar monto
+        if (paymentDTO.getAmount() == null || paymentDTO.getAmount() <= 0) {
+            logger.warn("Intento de registrar pago con monto inválido: {}", paymentDTO.getAmount());
             throw new IllegalArgumentException("El monto debe ser mayor a 0");
         }
         
         // Buscar el jugador
         Optional<Player> playerOpt = playerRepository.findByNameIgnoreCaseAndUser(paymentDTO.getPlayerName(), user);
         if (playerOpt.isEmpty()) {
+            logger.warn("Jugador no encontrado: {} para usuario: {}", paymentDTO.getPlayerName(), user.getId());
             throw new IllegalArgumentException("Jugador no encontrado: " + paymentDTO.getPlayerName());
         }
         
@@ -63,7 +69,9 @@ public class PaymentService {
         player.setTotalPaid(player.getTotalPaid() + paymentDTO.getAmount());
         playerRepository.save(player);
         
-        return paymentRepository.save(payment);
+        Payment savedPayment = paymentRepository.save(payment);
+        logger.info("Pago registrado exitosamente con ID: {}", savedPayment.getId());
+        return savedPayment;
     }
     
     /**

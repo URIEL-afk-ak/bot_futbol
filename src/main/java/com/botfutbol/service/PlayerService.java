@@ -1,10 +1,13 @@
 package com.botfutbol.service;
 
+import com.botfutbol.constants.PlayerConstants;
 import com.botfutbol.dto.PlayerDTO;
 import com.botfutbol.entity.Player;
 import com.botfutbol.entity.User;
 import com.botfutbol.repository.PlayerRepository;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
@@ -21,6 +24,8 @@ import java.util.Optional;
 @Transactional
 public class PlayerService {
     
+    private static final Logger logger = LoggerFactory.getLogger(PlayerService.class);
+    
     private final PlayerRepository playerRepository;
     
     public PlayerService(PlayerRepository playerRepository) {
@@ -32,17 +37,24 @@ public class PlayerService {
      */
     @CacheEvict(value = {"players", "topScorers"}, allEntries = true)
     public Player addPlayer(PlayerDTO playerDTO, User user) {
+        logger.info("Agregando jugador: {} para usuario: {}", playerDTO.getName(), user.getId());
+        
         Player player = new Player();
         player.setName(playerDTO.getName());
-        player.setSkillLevel(playerDTO.getSkillLevel() != null ? playerDTO.getSkillLevel() : 5);
-        player.setPosition(playerDTO.getPosition() != null ? playerDTO.getPosition() : "MED");
-        player.setTotalDebt(0);
-        player.setTotalPaid(0);
-        player.setGamesPlayed(0);
-        player.setGoalsScored(0);
-        player.setAttended(false);
+        player.setSkillLevel(playerDTO.getSkillLevel() != null ? 
+                playerDTO.getSkillLevel() : PlayerConstants.DEFAULT_SKILL_LEVEL);
+        player.setPosition(playerDTO.getPosition() != null ? 
+                playerDTO.getPosition() : PlayerConstants.DEFAULT_POSITION);
+        player.setTotalDebt(PlayerConstants.DEFAULT_TOTAL_DEBT);
+        player.setTotalPaid(PlayerConstants.DEFAULT_TOTAL_PAID);
+        player.setGamesPlayed(PlayerConstants.DEFAULT_GAMES_PLAYED);
+        player.setGoalsScored(PlayerConstants.DEFAULT_GOALS_SCORED);
+        player.setAttended(PlayerConstants.DEFAULT_ATTENDED);
         player.setUser(user);
-        return playerRepository.save(player);
+        
+        Player savedPlayer = playerRepository.save(player);
+        logger.info("Jugador agregado exitosamente con ID: {}", savedPlayer.getId());
+        return savedPlayer;
     }
     
     /**
@@ -78,18 +90,26 @@ public class PlayerService {
      * Actualiza el nivel de habilidad de un jugador.
      */
     public Player updateSkillLevel(String name, int skillLevel, User user) {
-        if (skillLevel < 1 || skillLevel > 10) {
-            throw new IllegalArgumentException("El nivel de habilidad debe estar entre 1 y 10");
+        logger.info("Actualizando nivel de habilidad de jugador: {} a nivel: {}", name, skillLevel);
+        
+        if (skillLevel < PlayerConstants.MIN_SKILL_LEVEL || 
+            skillLevel > PlayerConstants.MAX_SKILL_LEVEL) {
+            logger.warn("Nivel de habilidad inválido: {} (debe estar entre {} y {})", 
+                    skillLevel, PlayerConstants.MIN_SKILL_LEVEL, PlayerConstants.MAX_SKILL_LEVEL);
+            throw new IllegalArgumentException(PlayerConstants.ERROR_SKILL_LEVEL_RANGE);
         }
 
         Optional<Player> playerOpt = playerRepository.findByNameIgnoreCaseAndUser(name, user);
         if (playerOpt.isEmpty()) {
-            throw new IllegalArgumentException("Jugador no encontrado");
+            logger.warn("Jugador no encontrado: {} para usuario: {}", name, user.getId());
+            throw new IllegalArgumentException(PlayerConstants.ERROR_PLAYER_NOT_FOUND + ": " + name);
         }
 
         Player player = playerOpt.get();
         player.setSkillLevel(skillLevel);
-        return playerRepository.save(player);
+        Player updatedPlayer = playerRepository.save(player);
+        logger.info("Nivel de habilidad actualizado exitosamente para jugador: {}", name);
+        return updatedPlayer;
     }
     
     /**

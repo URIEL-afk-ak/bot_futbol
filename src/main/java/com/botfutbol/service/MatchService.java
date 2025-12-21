@@ -6,6 +6,8 @@ import com.botfutbol.dto.MatchSummaryDTO.PaymentStatusDTO;
 import com.botfutbol.entity.*;
 import com.botfutbol.repository.*;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
@@ -24,6 +26,8 @@ import java.util.stream.Collectors;
 @Service
 @Transactional
 public class MatchService {
+    
+    private static final Logger logger = LoggerFactory.getLogger(MatchService.class);
     
     private final MatchRepository matchRepository;
     private final GoalRepository goalRepository;
@@ -48,9 +52,12 @@ public class MatchService {
      */
     @CacheEvict(value = {"activeMatch", "stats"}, allEntries = true)
     public Match startMatch(Team teamA, Team teamB, double costPerPlayer, User user) {
+        logger.info("Iniciando partido para usuario: {} con costo por jugador: ${}", user.getId(), costPerPlayer);
+        
         Match match = new Match(teamA, teamB, costPerPlayer);
         match.setUser(user);
-        matchRepository.save(match);
+        Match savedMatch = matchRepository.save(match);
+        logger.info("Partido iniciado exitosamente con ID: {}", savedMatch.getId());
         
         // Optimizado: procesar todos los jugadores en batch
         List<String> allPlayerIds = new ArrayList<>();
@@ -69,7 +76,8 @@ public class MatchService {
             paymentService.addDebtToPlayer(player.getId(), costPerPlayer);
         });
         
-        return match;
+        logger.info("Partido iniciado con {} jugadores en total", allPlayerIds.size());
+        return savedMatch;
     }
     
     /**
@@ -77,9 +85,12 @@ public class MatchService {
      */
     @CacheEvict(value = {"activeMatch", "stats", "topScorers"}, allEntries = true)
     public Goal registerGoal(GoalDTO goalDTO, User user) {
+        logger.info("Registrando gol de jugador: {} para usuario: {}", goalDTO.getPlayerName(), user.getId());
+        
         // Verificar que hay un partido activo
         Optional<Match> matchOpt = getActiveMatch(user);
         if (matchOpt.isEmpty()) {
+            logger.warn("Intento de registrar gol sin partido activo para usuario: {}", user.getId());
             throw new IllegalStateException("No hay un partido activo");
         }
         
@@ -113,7 +124,9 @@ public class MatchService {
         }
         
         matchRepository.save(match);
-        return goalRepository.save(goal);
+        Goal savedGoal = goalRepository.save(goal);
+        logger.info("Gol registrado exitosamente con ID: {}", savedGoal.getId());
+        return savedGoal;
     }
     
     /**

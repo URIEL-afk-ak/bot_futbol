@@ -19,6 +19,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -98,17 +99,14 @@ public class BotController {
      * Agregar un jugador
      */
     @PostMapping("/player/add")
-    public ResponseEntity<String> addPlayerRest(@RequestBody PlayerDTO dto, HttpServletRequest request) {
+    public ResponseEntity<?> addPlayerRest(@Valid @RequestBody PlayerDTO dto, HttpServletRequest request) {
         try {
             User user = getUserFromRequest(request);
             Player player = playerService.addPlayer(dto, user);
             return ResponseEntity.ok(String.format("Jugador agregado: %s", player.getName()));
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(e.getMessage());
-        } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body("Error al agregar jugador: " + e.getMessage());
+            // El GlobalExceptionHandler manejará esto
+            throw e;
         }
     }
     
@@ -264,7 +262,7 @@ public class BotController {
      * Registrar un pago
      */
     @PostMapping("/payment/record")
-    public ResponseEntity<String> recordPaymentRest(@RequestBody PaymentDTO dto, HttpServletRequest request) {
+    public ResponseEntity<?> recordPaymentRest(@Valid @RequestBody PaymentDTO dto, HttpServletRequest request) {
         try {
             User user = getUserFromRequest(request);
             Payment payment = paymentService.registerPayment(dto, user);
@@ -272,9 +270,7 @@ public class BotController {
             return ResponseEntity.ok(String.format("Pago registrado: $%.2f. Deuda restante: $%.2f", 
                     payment.getAmount(), debt));
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(e.getMessage());
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
+            throw e; // El GlobalExceptionHandler manejará esto
         }
     }
     
@@ -802,7 +798,7 @@ public class BotController {
      * Login de usuario
      */
     @PostMapping("/login")
-    public ResponseEntity<Map<String, Object>> login(@RequestBody UserDTO loginData) {
+    public ResponseEntity<Map<String, Object>> login(@Valid @RequestBody UserDTO loginData) {
         String email = loginData.getEmail();
         String password = loginData.getPassword();
         User user = userService.findByEmail(email);
@@ -828,32 +824,8 @@ public class BotController {
      * Registro de usuario
      */
     @PostMapping("/register")
-    public ResponseEntity<Map<String, Object>> register(@RequestBody UserDTO userDTO) {
-        // Validar campos requeridos
-        if (userDTO.getNombre() == null || userDTO.getNombre().trim().isEmpty()) {
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", "El nombre es requerido");
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
-        }
-        if (userDTO.getApellido() == null || userDTO.getApellido().trim().isEmpty()) {
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", "El apellido es requerido");
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
-        }
-        if (userDTO.getEmail() == null || userDTO.getEmail().trim().isEmpty()) {
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", "El email es requerido");
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
-        }
-        if (userDTO.getPassword() == null || userDTO.getPassword().trim().isEmpty()) {
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", "La contraseña es requerida");
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
-        }
+    public ResponseEntity<Map<String, Object>> register(@Valid @RequestBody UserDTO userDTO) {
+        // La validación de campos se hace automáticamente con @Valid
         
         if (userService.findByEmail(userDTO.getEmail()) != null) {
             Map<String, Object> response = new HashMap<>();

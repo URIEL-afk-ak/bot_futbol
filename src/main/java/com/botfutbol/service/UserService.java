@@ -2,31 +2,45 @@ package com.botfutbol.service;
 
 import com.botfutbol.entity.User;
 import com.botfutbol.repository.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
 @Service
 public class UserService {
+    
+    private static final Logger logger = LoggerFactory.getLogger(UserService.class);
+    
     @Autowired
     private UserRepository userRepository;
     
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     public User findByEmail(String email) {
+        logger.debug("Buscando usuario por email: {}", email);
         return userRepository.findByEmail(email);
     }
 
     public User findById(Long id) {
-        return userRepository.findById(id).orElse(null);
+        logger.debug("Buscando usuario por ID: {}", id);
+        User user = userRepository.findById(id).orElse(null);
+        if (user == null) {
+            logger.warn("Usuario no encontrado con ID: {}", id);
+        }
+        return user;
     }
 
     public void save(User user) {
+        logger.info("Guardando usuario: {}", user.getEmail());
         // Si la contraseña no está hasheada (no empieza con $2a$), la hasheamos
         if (user.getPassword() != null && !user.getPassword().startsWith("$2a$")) {
             user.setPassword(passwordEncoder.encode(user.getPassword()));
+            logger.debug("Contraseña hasheada para usuario: {}", user.getEmail());
         }
         userRepository.save(user);
+        logger.info("Usuario guardado exitosamente con ID: {}", user.getId());
     }
 
     public boolean checkPassword(String rawPassword, String encodedPassword) {
@@ -34,8 +48,10 @@ public class UserService {
     }
 
     public User updateProfile(Long userId, String nombre, String apellido, String email, String password) {
+        logger.info("Actualizando perfil de usuario: {}", userId);
         User user = findById(userId);
         if (user == null) {
+            logger.warn("Intento de actualizar perfil de usuario inexistente: {}", userId);
             throw new IllegalArgumentException("Usuario no encontrado");
         }
         
