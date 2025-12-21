@@ -246,6 +246,38 @@ public class BotController {
     }
     
     /**
+     * Registrar un gol solo por equipo (para reconocimiento de voz - fútbol 5/7)
+     */
+    @PostMapping("/goal/record-by-team/{teamId}")
+    public ResponseEntity<?> recordGoalByTeam(@PathVariable String teamId, HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            matchService.registerGoalByTeam(teamId, user);
+            return ResponseEntity.ok(String.format("Gol registrado para equipo %s", teamId));
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            throw e; // El GlobalExceptionHandler manejará esto
+        }
+    }
+    
+    /**
+     * Deshacer el último gol registrado
+     */
+    @PostMapping("/goal/undo-last")
+    public ResponseEntity<?> undoLastGoal(HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            boolean success = matchService.undoLastGoal(user);
+            if (success) {
+                return ResponseEntity.ok("Último gol deshecho exitosamente");
+            } else {
+                return ResponseEntity.badRequest().body("No hay goles para deshacer");
+            }
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            throw e; // El GlobalExceptionHandler manejará esto
+        }
+    }
+    
+    /**
      * Obtener todos los goles
      */
     @GetMapping("/goals")
@@ -663,6 +695,20 @@ public class BotController {
             String errorMessage = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
             errorResponse.setUnrecognizedMessages(List.of("Error al procesar chat: " + errorMessage));
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        }
+    }
+    
+    /**
+     * Obtener información del partido activo (para reconocimiento de voz)
+     */
+    @GetMapping("/matches/active")
+    public ResponseEntity<com.botfutbol.dto.ActiveMatchDTO> getActiveMatchInfo(HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            com.botfutbol.dto.ActiveMatchDTO matchInfo = matchService.getActiveMatchInfo(user);
+            return ResponseEntity.ok(matchInfo);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
     }
     

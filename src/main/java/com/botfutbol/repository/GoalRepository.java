@@ -31,6 +31,9 @@ public interface GoalRepository extends JpaRepository<Goal, String> {
     // Cuenta goles de un equipo y usuario
     long countByTeamIdAndUser(String teamId, com.botfutbol.entity.User user);
 
+    // Obtiene el último gol de un partido y usuario (para deshacer)
+    List<Goal> findTop1ByMatchIdAndUserOrderByTimestampDesc(String matchId, com.botfutbol.entity.User user);
+
     // Métodos originales (si necesitas compatibilidad)
     List<Goal> findByPlayerId(String playerId);
     List<Goal> findByTeamId(String teamId);

@@ -130,6 +130,109 @@ public class MatchService {
     }
     
     /**
+     * Registra un gol solo por equipo (sin jugador específico) - Para fútbol 5/7 con reconocimiento de voz.
+     */
+    @CacheEvict(value = {"activeMatch", "stats", "topScorers"}, allEntries = true)
+    public Goal registerGoalByTeam(String teamId, User user) {
+        logger.info("Registrando gol por equipo: {} para usuario: {}", teamId, user.getId());
+        
+        // Verificar que hay un partido activo
+        Optional<Match> matchOpt = getActiveMatch(user);
+        if (matchOpt.isEmpty()) {
+            logger.warn("Intento de registrar gol sin partido activo para usuario: {}", user.getId());
+            throw new IllegalStateException("No hay un partido activo");
+        }
+        
+        Match match = matchOpt.get();
+        
+        // Validar que el teamId corresponde a uno de los equipos del partido
+        if (!teamId.equals(match.getTeamA().getId()) && !teamId.equals(match.getTeamB().getId())) {
+            logger.warn("TeamId inválido: {} para partido: {}", teamId, match.getId());
+            throw new IllegalArgumentException("Equipo no válido para este partido");
+        }
+        
+        // Crear el gol sin jugador específico (para fútbol 5/7)
+        Goal goal = new Goal(
+                "VOZ", // ID especial para goles registrados por voz
+                "Gol por voz", // Nombre genérico
+                teamId,
+                match.getId()
+        );
+        goal.setUser(user);
+        
+        // Actualizar goles del equipo
+        if (teamId.equals(match.getTeamA().getId())) {
+            match.getTeamA().setGoals(match.getTeamA().getGoals() + 1);
+        } else if (teamId.equals(match.getTeamB().getId())) {
+            match.getTeamB().setGoals(match.getTeamB().getGoals() + 1);
+        }
+        
+        matchRepository.save(match);
+        Goal savedGoal = goalRepository.save(goal);
+        logger.info("Gol registrado exitosamente por voz con ID: {}", savedGoal.getId());
+        return savedGoal;
+    }
+    
+    /**
+     * Deshace el último gol registrado en el partido activo.
+     */
+    @CacheEvict(value = {"activeMatch", "stats", "topScorers"}, allEntries = true)
+    public boolean undoLastGoal(User user) {
+        logger.info("Deshaciendo último gol para usuario: {}", user.getId());
+        
+        // Verificar que hay un partido activo
+        Optional<Match> matchOpt = getActiveMatch(user);
+        if (matchOpt.isEmpty()) {
+            logger.warn("Intento de deshacer gol sin partido activo para usuario: {}", user.getId());
+            throw new IllegalStateException("No hay un partido activo");
+        }
+        
+        Match match = matchOpt.get();
+        
+        // Obtener el último gol del partido
+        List<Goal> lastGoals = goalRepository.findTop1ByMatchIdAndUserOrderByTimestampDesc(match.getId(), user);
+        if (lastGoals.isEmpty()) {
+            logger.warn("No hay goles para deshacer en partido: {}", match.getId());
+            return false;
+        }
+        
+        Goal lastGoal = lastGoals.get(0);
+        String teamId = lastGoal.getTeamId();
+        
+        // Actualizar goles del equipo (reducir en 1)
+        if (teamId.equals(match.getTeamA().getId())) {
+            int currentGoals = match.getTeamA().getGoals();
+            if (currentGoals > 0) {
+                match.getTeamA().setGoals(currentGoals - 1);
+            }
+        } else if (teamId.equals(match.getTeamB().getId())) {
+            int currentGoals = match.getTeamB().getGoals();
+            if (currentGoals > 0) {
+                match.getTeamB().setGoals(currentGoals - 1);
+            }
+        }
+        
+        // Si el gol tenía un jugador asociado, actualizar sus estadísticas
+        if (lastGoal.getPlayerId() != null && !lastGoal.getPlayerId().equals("VOZ")) {
+            Optional<Player> playerOpt = playerRepository.findById(lastGoal.getPlayerId());
+            if (playerOpt.isPresent()) {
+                Player player = playerOpt.get();
+                if (player.getGoalsScored() > 0) {
+                    player.setGoalsScored(player.getGoalsScored() - 1);
+                    playerRepository.save(player);
+                }
+            }
+        }
+        
+        // Eliminar el gol
+        goalRepository.delete(lastGoal);
+        matchRepository.save(match);
+        
+        logger.info("Último gol deshecho exitosamente. Gol ID: {}", lastGoal.getId());
+        return true;
+    }
+    
+    /**
      * Obtiene el partido activo.
      * Optimizado: usa caché para reducir consultas a la base de datos.
      */
@@ -209,6 +312,27 @@ public class MatchService {
                 match.getTeamA().getGoals(),
                 match.getTeamB().getGoals(),
                 match.getTeamB().getName());
+    }
+    
+    /**
+     * Obtiene información del partido activo para reconocimiento de voz.
+     */
+    public com.botfutbol.dto.ActiveMatchDTO getActiveMatchInfo(User user) {
+        Optional<Match> matchOpt = getActiveMatch(user);
+        if (matchOpt.isEmpty()) {
+            return new com.botfutbol.dto.ActiveMatchDTO();
+        }
+        
+        Match match = matchOpt.get();
+        return new com.botfutbol.dto.ActiveMatchDTO(
+                match.getId(),
+                match.getTeamA().getId(),
+                match.getTeamB().getId(),
+                match.getTeamA().getName(),
+                match.getTeamB().getName(),
+                match.getTeamA().getGoals(),
+                match.getTeamB().getGoals()
+        );
     }
     
     /**
