@@ -2,7 +2,9 @@ package com.botfutbol.repository;
 
 import com.botfutbol.entity.Player;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -39,6 +41,11 @@ public interface PlayerRepository extends JpaRepository<Player, String> {
 
     // Obtiene todos los jugadores activos por usuario
     List<Player> findAllByActivoTrueAndUser(com.botfutbol.entity.User user);
+
+    // Optimizado: Desmarca asistencia de todos los jugadores de un usuario (actualización masiva)
+    @Modifying
+    @Query("UPDATE Player p SET p.attended = false WHERE p.user = :user AND p.attended = true")
+    int unmarkAllAttendanceByUser(@Param("user") com.botfutbol.entity.User user);
 
     // Métodos originales (si necesitas compatibilidad)
     Optional<Player> findByNameIgnoreCase(String name);

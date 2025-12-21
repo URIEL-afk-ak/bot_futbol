@@ -6,6 +6,8 @@ import com.botfutbol.dto.MatchSummaryDTO.PaymentStatusDTO;
 import com.botfutbol.entity.*;
 import com.botfutbol.repository.*;
 
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -44,19 +46,26 @@ public class MatchService {
     /**
      * Inicia un nuevo partido.
      */
+    @CacheEvict(value = {"activeMatch", "stats"}, allEntries = true)
     public Match startMatch(Team teamA, Team teamB, double costPerPlayer, User user) {
         Match match = new Match(teamA, teamB, costPerPlayer);
         match.setUser(user);
         matchRepository.save(match);
         
-        // Incrementar partidos jugados y agregar deuda a cada jugador
+        // Optimizado: procesar todos los jugadores en batch
+        List<String> allPlayerIds = new ArrayList<>();
+        teamA.getPlayers().forEach(player -> allPlayerIds.add(player.getId()));
+        teamB.getPlayers().forEach(player -> allPlayerIds.add(player.getId()));
+        
+        // Incrementar partidos jugados en batch
+        playerService.incrementGamesPlayedBatch(allPlayerIds);
+        
+        // Agregar deuda a cada jugador (mantener individual por lógica de negocio)
         teamA.getPlayers().forEach(player -> {
-            playerService.incrementGamesPlayed(player.getId());
             paymentService.addDebtToPlayer(player.getId(), costPerPlayer);
         });
         
         teamB.getPlayers().forEach(player -> {
-            playerService.incrementGamesPlayed(player.getId());
             paymentService.addDebtToPlayer(player.getId(), costPerPlayer);
         });
         
@@ -66,6 +75,7 @@ public class MatchService {
     /**
      * Registra un gol en el partido actual.
      */
+    @CacheEvict(value = {"activeMatch", "stats", "topScorers"}, allEntries = true)
     public Goal registerGoal(GoalDTO goalDTO, User user) {
         // Verificar que hay un partido activo
         Optional<Match> matchOpt = getActiveMatch(user);
@@ -107,15 +117,25 @@ public class MatchService {
     }
     
     /**
-     * Obtiene el partido actual.
+     * Obtiene el partido activo.
+     * Optimizado: usa caché para reducir consultas a la base de datos.
+     */
+    @Cacheable(value = "activeMatch", key = "#user.id")
+    public Optional<Match> getActiveMatch(User user) {
+        return matchRepository.findFirstByActiveTrueAndUser(user);
+    }
+    
+    /**
+     * Obtiene el partido actual (alias para compatibilidad).
      */
     public Optional<Match> getCurrentMatch(User user) {
-        return matchRepository.findFirstByActiveTrueAndUser(user);
+        return getActiveMatch(user);
     }
     
     /**
      * Finaliza el partido actual.
      */
+    @CacheEvict(value = {"activeMatch", "stats"}, allEntries = true)
     public void endMatch(User user) {
         Optional<Match> matchOpt = matchRepository.findFirstByActiveTrueAndUser(user);
         if (matchOpt.isPresent()) {
@@ -127,7 +147,9 @@ public class MatchService {
     
     /**
      * Obtiene estadísticas generales.
+     * Optimizado: usa caché para reducir consultas a la base de datos.
      */
+    @Cacheable(value = "stats", key = "#user.id")
     public StatsDTO getStats(User user) {
         StatsDTO stats = new StatsDTO();
         
@@ -163,7 +185,7 @@ public class MatchService {
      * Obtiene el resultado del partido actual.
      */
     public String getCurrentMatchScore(User user) {
-        Optional<Match> matchOpt = matchRepository.findFirstByActiveTrueAndUser(user);
+        Optional<Match> matchOpt = getActiveMatch(user);
         if (matchOpt.isEmpty()) {
             return "No hay partido activo";
         }
@@ -246,12 +268,5 @@ public class MatchService {
         PaymentStatusDTO paymentStatus = new PaymentStatusDTO(paidPlayers, pendingPlayers);
         
         return new MatchSummaryDTO(matchDate, teams, paymentStatus);
-    }
-    
-    /**
-     * Obtiene el partido activo actual.
-     */
-    public Optional<Match> getActiveMatch(User user) {
-        return matchRepository.findFirstByActiveTrueAndUser(user);
     }
 }

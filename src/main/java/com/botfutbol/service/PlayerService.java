@@ -5,6 +5,8 @@ import com.botfutbol.entity.Player;
 import com.botfutbol.entity.User;
 import com.botfutbol.repository.PlayerRepository;
 
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,6 +30,7 @@ public class PlayerService {
     /**
      * Agrega un nuevo jugador.
      */
+    @CacheEvict(value = {"players", "topScorers"}, allEntries = true)
     public Player addPlayer(PlayerDTO playerDTO, User user) {
         Player player = new Player();
         player.setName(playerDTO.getName());
@@ -51,7 +54,9 @@ public class PlayerService {
     
     /**
      * Obtiene todos los jugadores.
+     * Optimizado: usa caché para reducir consultas a la base de datos.
      */
+    @Cacheable(value = "players", key = "#user.id")
     public List<Player> getAllPlayers(User user) {
         return playerRepository.findByUser(user);
     }
@@ -59,6 +64,7 @@ public class PlayerService {
     /**
      * Elimina un jugador por nombre.
      */
+    @CacheEvict(value = {"players", "topScorers"}, allEntries = true)
     public boolean removePlayer(String name, User user) {
         Optional<Player> player = playerRepository.findByNameIgnoreCaseAndUser(name, user);
         if (player.isPresent()) {
@@ -96,6 +102,7 @@ public class PlayerService {
     /**
      * Registra un gol para un jugador.
      */
+    @CacheEvict(value = {"players", "topScorers"}, allEntries = true)
     public void recordGoal(String playerId) {
         Optional<Player> playerOpt = playerRepository.findById(playerId);
         if (playerOpt.isPresent()) {
@@ -107,7 +114,9 @@ public class PlayerService {
     
     /**
      * Incrementa partidos jugados de un jugador.
+     * Optimizado: usa batch update para múltiples jugadores.
      */
+    @CacheEvict(value = "players", allEntries = true)
     public void incrementGamesPlayed(String playerId) {
         Optional<Player> playerOpt = playerRepository.findById(playerId);
         if (playerOpt.isPresent()) {
@@ -115,6 +124,18 @@ public class PlayerService {
             player.setGamesPlayed(player.getGamesPlayed() + 1);
             playerRepository.save(player);
         }
+    }
+    
+    /**
+     * Incrementa partidos jugados para múltiples jugadores (optimizado).
+     */
+    @CacheEvict(value = "players", allEntries = true)
+    public void incrementGamesPlayedBatch(List<String> playerIds) {
+        List<Player> players = playerRepository.findAllById(playerIds);
+        for (Player player : players) {
+            player.setGamesPlayed(player.getGamesPlayed() + 1);
+        }
+        playerRepository.saveAll(players);
     }
     
     /**
@@ -126,7 +147,9 @@ public class PlayerService {
     
     /**
      * Obtiene los mejores goleadores.
+     * Optimizado: usa caché para reducir consultas a la base de datos.
      */
+    @Cacheable(value = "topScorers", key = "#user.id")
     public List<Player> getTopScorers(int limit, User user) {
         return playerRepository.findTop10ByUserOrderByGoalsScoredDesc(user);
     }
@@ -134,6 +157,7 @@ public class PlayerService {
     /**
      * Marca la asistencia de un jugador.
      */
+    @CacheEvict(value = "players", allEntries = true)
     public void markAttendance(String playerName, boolean attended, User user) {
         Optional<Player> playerOpt = playerRepository.findByNameIgnoreCaseAndUser(playerName, user);
         if (playerOpt.isEmpty()) {
@@ -147,18 +171,11 @@ public class PlayerService {
     
     /**
      * Desmarca la asistencia de todos los jugadores del usuario.
+     * Optimizado: usa actualización masiva en lugar de N saves individuales.
      */
+    @CacheEvict(value = "players", allEntries = true)
     public int unmarkAllAttendance(User user) {
-        List<Player> players = playerRepository.findByUser(user);
-        int count = 0;
-        for (Player player : players) {
-            if (player.isAttended()) {
-                player.setAttended(false);
-                playerRepository.save(player);
-                count++;
-            }
-        }
-        return count;
+        return playerRepository.unmarkAllAttendanceByUser(user);
     }
     
 }

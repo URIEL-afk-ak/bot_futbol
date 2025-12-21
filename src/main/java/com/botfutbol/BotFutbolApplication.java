@@ -2,12 +2,14 @@ package com.botfutbol;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.cache.annotation.EnableCaching;
 
 /**
  * Clase principal de la aplicación Bot de Fútbol con Spring Boot.
  * Configura y ejecuta la aplicación.
  */
 @SpringBootApplication
+@EnableCaching
 public class BotFutbolApplication {
     
     /**
