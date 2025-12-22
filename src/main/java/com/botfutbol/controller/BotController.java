@@ -172,13 +172,8 @@ public class BotController {
     public ResponseEntity<String> markAttendance(@PathVariable String name, @RequestParam boolean attended, HttpServletRequest request) {
         try {
             User user = getUserFromRequest(request);
-            Optional<Player> playerOpt = playerService.findPlayerByName(name, user);
-            if (playerOpt.isEmpty()) {
-                return ResponseEntity.badRequest().body("Jugador no encontrado: " + name);
-            }
-            Player player = playerOpt.get();
-            player.setAttended(attended);
-            playerService.updatePlayer(player);
+            // Usar el método markAttendance del servicio que invalida el caché correctamente
+            playerService.markAttendance(name, attended, user);
             return ResponseEntity.ok(String.format("Asistencia actualizada: %s", name));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(e.getMessage());
