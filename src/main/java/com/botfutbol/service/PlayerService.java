@@ -161,6 +161,7 @@ public class PlayerService {
     /**
      * Actualiza un jugador existente.
      */
+    @CacheEvict(value = {"players", "topScorers"}, allEntries = true)
     public Player updatePlayer(Player player) {
         return playerRepository.save(player);
     }
