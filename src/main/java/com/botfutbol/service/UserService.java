@@ -22,6 +22,11 @@ public class UserService {
         logger.debug("Buscando usuario por email: {}", email);
         return userRepository.findByEmail(email);
     }
+    
+    public User findByUsername(String username) {
+        logger.debug("Buscando usuario por username: {}", username);
+        return userRepository.findByUsername(username);
+    }
 
     public User findById(Long id) {
         logger.debug("Buscando usuario por ID: {}", id);
@@ -47,7 +52,7 @@ public class UserService {
         return passwordEncoder.matches(rawPassword, encodedPassword);
     }
 
-    public User updateProfile(Long userId, String nombre, String apellido, String email, String password) {
+    public User updateProfile(Long userId, String nombre, String apellido, String email, String username, String password) {
         logger.info("Actualizando perfil de usuario: {}", userId);
         User user = findById(userId);
         if (user == null) {
@@ -62,6 +67,15 @@ public class UserService {
                 throw new IllegalArgumentException("El email ya está en uso");
             }
             user.setEmail(email.trim().toLowerCase());
+        }
+        
+        // Verificar si el username ya está en uso por otro usuario
+        if (username != null && !username.equals(user.getUsername())) {
+            User existingUser = findByUsername(username);
+            if (existingUser != null && !existingUser.getId().equals(userId)) {
+                throw new IllegalArgumentException("El nombre de usuario ya está en uso");
+            }
+            user.setUsername(username.trim().toLowerCase());
         }
         
         if (nombre != null && !nombre.trim().isEmpty()) {

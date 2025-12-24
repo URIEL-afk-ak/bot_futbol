@@ -44,6 +44,12 @@ class BotControllerTest {
     private ChatParsingService chatParsingService;
 
     @Mock
+    private GroupService groupService;
+
+    @Mock
+    private GameEventService gameEventService;
+
+    @Mock
     private UserService userService;
 
     @Mock
