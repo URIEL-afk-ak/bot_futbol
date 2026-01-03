@@ -4,7 +4,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceProperties;
-import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
@@ -52,21 +51,45 @@ public class DatabaseConfig {
         // Prioridad 1: DATABASE_URL (formato Supabase/Render: postgresql://user:pass@host:port/dbname)
         if (databaseUrl != null && !databaseUrl.isEmpty() && !databaseUrl.startsWith("jdbc:")) {
             try {
-                logger.info("🔍 Intentando parsear DATABASE_URL: {}", databaseUrl.substring(0, Math.min(50, databaseUrl.length())) + "...");
-                URI dbUri = new URI(databaseUrl.replace("postgresql://", "http://"));
+                logger.info("🔍 Intentando parsear DATABASE_URL (primeros 50 caracteres): {}", 
+                    databaseUrl.length() > 50 ? databaseUrl.substring(0, 50) + "..." : databaseUrl);
                 
-                username = dbUri.getUserInfo().split(":")[0];
-                password = dbUri.getUserInfo().split(":")[1];
+                // Manejar URLs con o sin esquema
+                String urlToParse = databaseUrl;
+                if (!urlToParse.startsWith("postgresql://") && !urlToParse.startsWith("postgres://")) {
+                    urlToParse = "postgresql://" + urlToParse;
+                }
+                
+                URI dbUri = new URI(urlToParse.replace("postgresql://", "http://").replace("postgres://", "http://"));
+                
+                String userInfo = dbUri.getUserInfo();
+                if (userInfo == null || !userInfo.contains(":")) {
+                    throw new IllegalArgumentException("DATABASE_URL debe incluir usuario y contraseña: user:password@host");
+                }
+                
+                username = userInfo.split(":")[0];
+                password = userInfo.split(":")[1];
                 String host = dbUri.getHost();
                 int port = dbUri.getPort() == -1 ? 5432 : dbUri.getPort();
                 String database = dbUri.getPath().replaceFirst("/", "");
                 
-                jdbcUrl = String.format("jdbc:postgresql://%s:%d/%s", host, port, database);
+                if (database.isEmpty()) {
+                    database = "postgres";
+                }
                 
-                logger.info("✅ Configuración de base de datos desde DATABASE_URL: {}@{}:{}/{}", 
-                    username, host, port, database);
+                // Construir JDBC URL con parámetros SSL para Supabase
+                // Usar 'prefer' para mayor compatibilidad (intenta SSL pero permite sin SSL)
+                jdbcUrl = String.format("jdbc:postgresql://%s:%d/%s?sslmode=prefer&connectTimeout=10", host, port, database);
+                
+                logger.info("✅ Configuración de base de datos desde DATABASE_URL:");
+                logger.info("   Usuario: {}", username);
+                logger.info("   Host: {}", host);
+                logger.info("   Puerto: {}", port);
+                logger.info("   Base de datos: {}", database);
+                logger.info("   JDBC URL: jdbc:postgresql://{}:{}/{}", host, port, database);
             } catch (Exception e) {
-                logger.error("❌ Error al parsear DATABASE_URL: {}. Intentando variables individuales...", e.getMessage());
+                logger.error("❌ Error al parsear DATABASE_URL: {}", e.getMessage());
+                logger.error("   DATABASE_URL recibida: {}", databaseUrl);
                 e.printStackTrace();
                 // Continuar con variables individuales
                 jdbcUrl = null;
@@ -74,6 +97,11 @@ public class DatabaseConfig {
                 password = null;
             }
         } else {
+            if (databaseUrl == null || databaseUrl.isEmpty()) {
+                logger.warn("⚠️ DATABASE_URL está vacía o no configurada");
+            } else {
+                logger.warn("⚠️ DATABASE_URL parece ser una URL JDBC directa: {}", databaseUrl.substring(0, Math.min(30, databaseUrl.length())));
+            }
             jdbcUrl = null;
             username = null;
             password = null;
