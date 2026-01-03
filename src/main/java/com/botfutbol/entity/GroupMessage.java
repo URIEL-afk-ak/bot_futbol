@@ -34,6 +34,12 @@ public class GroupMessage {
     @Column(name = "is_pinned")
     private Boolean isPinned = false; // Mensaje fijado
     
+    @Column(name = "pinned_at")
+    private LocalDateTime pinnedAt; // Fecha en que se fijó el mensaje
+    
+    @Column(name = "pinned_until")
+    private LocalDateTime pinnedUntil; // Fecha hasta la cual está fijado (null = indefinido)
+    
     @Column(name = "is_highlighted")
     private Boolean isHighlighted = false; // Mensaje destacado
     
@@ -119,6 +125,28 @@ public class GroupMessage {
     
     public void setPinned(boolean isPinned) {
         this.isPinned = isPinned;
+        if (isPinned && this.pinnedAt == null) {
+            this.pinnedAt = LocalDateTime.now();
+        } else if (!isPinned) {
+            this.pinnedAt = null;
+            this.pinnedUntil = null;
+        }
+    }
+    
+    public LocalDateTime getPinnedAt() {
+        return pinnedAt;
+    }
+    
+    public void setPinnedAt(LocalDateTime pinnedAt) {
+        this.pinnedAt = pinnedAt;
+    }
+    
+    public LocalDateTime getPinnedUntil() {
+        return pinnedUntil;
+    }
+    
+    public void setPinnedUntil(LocalDateTime pinnedUntil) {
+        this.pinnedUntil = pinnedUntil;
     }
     
     public boolean isHighlighted() {

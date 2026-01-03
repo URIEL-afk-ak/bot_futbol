@@ -84,6 +84,18 @@ public class GroupMessageService {
         try {
             List<GroupMessage> messages = groupMessageRepository.findByGroupOrderByCreatedAtAsc(group);
             
+            // Verificar y desfijar mensajes expirados
+            java.time.LocalDateTime now = java.time.LocalDateTime.now();
+            for (GroupMessage msg : messages) {
+                if (msg.isPinned() && msg.getPinnedUntil() != null && msg.getPinnedUntil().isBefore(now)) {
+                    msg.setPinned(false);
+                    msg.setPinnedAt(null);
+                    msg.setPinnedUntil(null);
+                    groupMessageRepository.save(msg);
+                    logger.info("Mensaje {} desfijado automáticamente por expiración", msg.getId());
+                }
+            }
+            
             // Si hay más de 50 mensajes, tomar solo los últimos 50
             if (messages.size() > 50) {
                 messages = messages.subList(messages.size() - 50, messages.size());
@@ -166,6 +178,8 @@ public class GroupMessageService {
                     createdAt,
                     message.isSystemMessage(),
                     message.isPinned(),
+                    message.getPinnedAt(),
+                    message.getPinnedUntil(),
                     message.isHighlighted(),
                     message.isDeleted(),
                     message.getEditedAt(),
@@ -207,10 +221,14 @@ public class GroupMessageService {
     }
     
     /**
-     * Fija un mensaje.
+     * Fija un mensaje con duración opcional.
+     * @param messageId ID del mensaje
+     * @param userId ID del usuario
+     * @param durationInDays Duración en días (null = indefinido)
+     * @return DTO del mensaje actualizado
      */
-    public GroupMessageDTO pinMessage(String messageId, Long userId) {
-        logger.info("Usuario {} fijando mensaje {}", userId, messageId);
+    public GroupMessageDTO pinMessage(String messageId, Long userId, Integer durationInDays) {
+        logger.info("Usuario {} fijando mensaje {} con duración {} días", userId, messageId, durationInDays);
         
         GroupMessage message = groupMessageRepository.findById(messageId)
                 .orElseThrow(() -> new IllegalArgumentException("Mensaje no encontrado"));
@@ -225,7 +243,26 @@ public class GroupMessageService {
             throw new IllegalStateException("Solo los administradores pueden fijar mensajes");
         }
         
-        message.setPinned(!message.isPinned());
+        java.time.LocalDateTime now = java.time.LocalDateTime.now();
+        
+        if (message.isPinned()) {
+            // Desfijar
+            message.setPinned(false);
+            message.setPinnedAt(null);
+            message.setPinnedUntil(null);
+        } else {
+            // Fijar
+            message.setPinned(true);
+            message.setPinnedAt(now);
+            
+            if (durationInDays != null && durationInDays > 0) {
+                message.setPinnedUntil(now.plusDays(durationInDays));
+            } else {
+                // Indefinido
+                message.setPinnedUntil(null);
+            }
+        }
+        
         message = groupMessageRepository.save(message);
         
         User currentUser = userRepository.findById(userId).orElse(null);

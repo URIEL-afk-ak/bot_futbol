@@ -14,6 +14,8 @@ public class GroupMessageDTO {
     private LocalDateTime createdAt;
     private boolean isSystemMessage;
     private boolean isPinned;
+    private LocalDateTime pinnedAt;
+    private LocalDateTime pinnedUntil;
     private boolean isHighlighted;
     private boolean isDeleted;
     private LocalDateTime editedAt;
@@ -24,7 +26,8 @@ public class GroupMessageDTO {
     
     public GroupMessageDTO(String id, String groupId, Long userId, String userName, 
                           String message, LocalDateTime createdAt, boolean isSystemMessage,
-                          boolean isPinned, boolean isHighlighted, boolean isDeleted, 
+                          boolean isPinned, LocalDateTime pinnedAt, LocalDateTime pinnedUntil,
+                          boolean isHighlighted, boolean isDeleted, 
                           LocalDateTime editedAt, boolean isDeletedForMe) {
         this.id = id;
         this.groupId = groupId;
@@ -34,6 +37,8 @@ public class GroupMessageDTO {
         this.createdAt = createdAt;
         this.isSystemMessage = isSystemMessage;
         this.isPinned = isPinned;
+        this.pinnedAt = pinnedAt;
+        this.pinnedUntil = pinnedUntil;
         this.isHighlighted = isHighlighted;
         this.isDeleted = isDeleted;
         this.editedAt = editedAt;
@@ -104,6 +109,22 @@ public class GroupMessageDTO {
     
     public void setPinned(boolean isPinned) {
         this.isPinned = isPinned;
+    }
+    
+    public LocalDateTime getPinnedAt() {
+        return pinnedAt;
+    }
+    
+    public void setPinnedAt(LocalDateTime pinnedAt) {
+        this.pinnedAt = pinnedAt;
+    }
+    
+    public LocalDateTime getPinnedUntil() {
+        return pinnedUntil;
+    }
+    
+    public void setPinnedUntil(LocalDateTime pinnedUntil) {
+        this.pinnedUntil = pinnedUntil;
     }
     
     public boolean isHighlighted() {

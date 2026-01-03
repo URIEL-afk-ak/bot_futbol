@@ -2647,10 +2647,27 @@ public class BotController {
     @PutMapping("/groups/{groupId}/messages/{messageId}/pin")
     public ResponseEntity<Map<String, Object>> pinMessage(@PathVariable String groupId,
                                                          @PathVariable String messageId,
+                                                         @RequestBody(required = false) Map<String, Object> requestBody,
                                                          HttpServletRequest request) {
         try {
             User user = getUserFromRequest(request);
-            com.botfutbol.dto.GroupMessageDTO message = groupMessageService.pinMessage(messageId, user.getId());
+            
+            // Obtener duración del body (opcional)
+            Integer durationInDays = null;
+            if (requestBody != null && requestBody.containsKey("durationInDays")) {
+                Object durationObj = requestBody.get("durationInDays");
+                if (durationObj instanceof Number) {
+                    durationInDays = ((Number) durationObj).intValue();
+                } else if (durationObj instanceof String) {
+                    try {
+                        durationInDays = Integer.parseInt((String) durationObj);
+                    } catch (NumberFormatException e) {
+                        // Ignorar si no es un número válido
+                    }
+                }
+            }
+            
+            com.botfutbol.dto.GroupMessageDTO message = groupMessageService.pinMessage(messageId, user.getId(), durationInDays);
             
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
