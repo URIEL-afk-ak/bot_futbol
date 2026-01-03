@@ -20,8 +20,8 @@ public class UserDTO {
     @Size(max = 255, message = "El email no puede exceder 255 caracteres")
     private String email;
     
-    @NotBlank(message = "El nombre de usuario es obligatorio")
-    @Size(min = 3, message = "El nombre de usuario debe tener al menos 3 caracteres")
+    // Username es opcional para permitir usuarios antiguos
+    @Size(min = 3, message = "El nombre de usuario debe tener al menos 3 caracteres", groups = {})
     @Size(max = 50, message = "El nombre de usuario no puede exceder 50 caracteres")
     @Pattern(regexp = "^[a-zA-Z0-9_]+$", message = "El nombre de usuario solo puede contener letras, números y guiones bajos")
     private String username;

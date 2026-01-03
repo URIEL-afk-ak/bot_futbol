@@ -17,6 +17,9 @@ public interface GameEventRepository extends JpaRepository<GameEvent, String> {
     // Busca eventos activos de un grupo
     List<GameEvent> findByGroupAndActiveTrueOrderByDateAsc(Group group);
     
+    // Busca eventos históricos (inactivos) de un grupo
+    List<GameEvent> findByGroupAndActiveFalseOrderByDateDesc(Group group);
+    
     // Busca todos los eventos de un grupo
     List<GameEvent> findByGroupOrderByDateDesc(Group group);
     
@@ -26,4 +29,6 @@ public interface GameEventRepository extends JpaRepository<GameEvent, String> {
     // Busca eventos creados por un usuario
     List<GameEvent> findByCreatedBy_Id(Long userId);
 }
+
+
 

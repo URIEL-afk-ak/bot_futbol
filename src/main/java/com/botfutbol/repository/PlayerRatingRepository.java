@@ -29,6 +29,9 @@ public interface PlayerRatingRepository extends JpaRepository<PlayerRating, Stri
     // Busca todas las calificaciones que dio un usuario
     List<PlayerRating> findByRatedBy(User ratedBy);
     
+    // Busca todas las calificaciones que dio un usuario en un evento específico
+    List<PlayerRating> findByEventAndRatedBy(GameEvent event, User ratedBy);
+    
     // Busca si un usuario ya calificó a un jugador en un evento
     Optional<PlayerRating> findByEventAndPlayerAndRatedBy(GameEvent event, User player, User ratedBy);
     
@@ -40,4 +43,6 @@ public interface PlayerRatingRepository extends JpaRepository<PlayerRating, Stri
     @Query("SELECT AVG(pr.rating) FROM PlayerRating pr WHERE pr.player = :player AND pr.event.group = :group")
     Double calculateAverageRatingByPlayerAndGroup(@Param("player") User player, @Param("group") com.botfutbol.entity.Group group);
 }
+
+
 

@@ -6,7 +6,7 @@ import java.util.UUID;
 
 /**
  * Entidad que representa una calificación de un jugador en un evento.
- * Almacena la nota numérica (1-10) que recibió un jugador en un evento específico.
+ * Almacena la nota numérica (0-10, puede ser decimal) que recibió un jugador en un evento específico.
  */
 @Entity
 @Table(
@@ -34,7 +34,7 @@ public class PlayerRating {
     private User ratedBy; // Usuario que calificó
     
     @Column(nullable = false)
-    private int rating; // Calificación de 1 a 10
+    private double rating; // Calificación de 0 a 10 (puede ser decimal)
     
     @Column(length = 500)
     private String comment; // Comentario opcional
@@ -47,19 +47,19 @@ public class PlayerRating {
         this.ratedAt = LocalDateTime.now();
     }
     
-    public PlayerRating(GameEvent event, User player, User ratedBy, int rating) {
+    public PlayerRating(GameEvent event, User player, User ratedBy, double rating) {
         this();
         this.event = event;
         this.player = player;
         this.ratedBy = ratedBy;
         // Validar rango antes de asignar
-        if (rating < 1 || rating > 10) {
-            throw new IllegalArgumentException("La calificación debe estar entre 1 y 10");
+        if (rating < 0 || rating > 10) {
+            throw new IllegalArgumentException("La calificación debe estar entre 0 y 10");
         }
         this.rating = rating;
     }
     
-    public PlayerRating(GameEvent event, User player, User ratedBy, int rating, String comment) {
+    public PlayerRating(GameEvent event, User player, User ratedBy, double rating, String comment) {
         this(event, player, ratedBy, rating);
         this.comment = comment;
     }
@@ -98,13 +98,13 @@ public class PlayerRating {
         this.ratedBy = ratedBy;
     }
     
-    public int getRating() {
+    public double getRating() {
         return rating;
     }
     
-    public void setRating(int rating) {
-        if (rating < 1 || rating > 10) {
-            throw new IllegalArgumentException("La calificación debe estar entre 1 y 10");
+    public void setRating(double rating) {
+        if (rating < 0 || rating > 10) {
+            throw new IllegalArgumentException("La calificación debe estar entre 0 y 10");
         }
         this.rating = rating;
     }

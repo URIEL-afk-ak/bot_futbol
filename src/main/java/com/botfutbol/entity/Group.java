@@ -31,17 +31,29 @@ public class Group {
     @Column(name = "is_active", nullable = false)
     private boolean isActive = true;
     
+    @Column(name = "is_private", nullable = false, columnDefinition = "boolean default false")
+    private boolean isPrivate = false; // false = público, true = privado
+    
+    @Column(name = "type", length = 50, nullable = true)
+    private String type; // "FUTBOL", "BASKET", "VOLEY", etc.
+    
+    @Column(name = "photo_url", length = 500, nullable = true)
+    private String photoUrl; // URL de la foto del grupo
+    
     public Group() {
         this.id = UUID.randomUUID().toString();
         this.createdAt = LocalDateTime.now();
         this.isActive = true;
+        this.isPrivate = false;
     }
     
-    public Group(String name, String description, User createdBy) {
+    public Group(String name, String description, User createdBy, boolean isPrivate, String type) {
         this();
         this.name = name;
         this.description = description;
         this.createdBy = createdBy;
+        this.isPrivate = isPrivate;
+        this.type = type;
     }
     
     // Getters y Setters
@@ -94,6 +106,30 @@ public class Group {
         isActive = active;
     }
     
+    public boolean isPrivate() {
+        return isPrivate;
+    }
+    
+    public void setPrivate(boolean isPrivate) {
+        this.isPrivate = isPrivate;
+    }
+    
+    public String getType() {
+        return type;
+    }
+    
+    public void setType(String type) {
+        this.type = type;
+    }
+    
+    public String getPhotoUrl() {
+        return photoUrl;
+    }
+    
+    public void setPhotoUrl(String photoUrl) {
+        this.photoUrl = photoUrl;
+    }
+    
     @Override
     public String toString() {
         return "Group{" +
@@ -103,7 +139,11 @@ public class Group {
                 ", createdAt=" + createdAt +
                 ", createdBy=" + (createdBy != null ? createdBy.getId() : null) +
                 ", isActive=" + isActive +
+                ", isPrivate=" + isPrivate +
+                ", type='" + type + '\'' +
                 '}';
     }
 }
+
+
 

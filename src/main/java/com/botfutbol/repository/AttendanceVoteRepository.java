@@ -34,3 +34,5 @@ public interface AttendanceVoteRepository extends JpaRepository<AttendanceVote, 
     List<AttendanceVote> findByUser(User user);
 }
 
+
+

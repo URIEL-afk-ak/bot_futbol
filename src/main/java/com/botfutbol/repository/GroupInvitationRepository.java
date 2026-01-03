@@ -24,3 +24,5 @@ public interface GroupInvitationRepository extends JpaRepository<GroupInvitation
     List<GroupInvitation> findByCreatedByUserId(Long userId);
 }
 
+
+

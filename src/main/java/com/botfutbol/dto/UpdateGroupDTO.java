@@ -1,22 +1,22 @@
 package com.botfutbol.dto;
 
 /**
- * DTO para crear un nuevo grupo.
+ * DTO para actualizar un grupo existente.
  */
-public class CreateGroupDTO {
+public class UpdateGroupDTO {
     private String name;
     private String description;
-    private boolean isPrivate = false;
     private String type; // "FUTBOL", "BASKET", "VOLEY", etc.
+    private String photoUrl; // URL de la foto del grupo
     
-    public CreateGroupDTO() {
+    public UpdateGroupDTO() {
     }
     
-    public CreateGroupDTO(String name, String description, boolean isPrivate, String type) {
+    public UpdateGroupDTO(String name, String description, String type, String photoUrl) {
         this.name = name;
         this.description = description;
-        this.isPrivate = isPrivate;
         this.type = type;
+        this.photoUrl = photoUrl;
     }
     
     public String getName() {
@@ -35,14 +35,6 @@ public class CreateGroupDTO {
         this.description = description;
     }
     
-    public boolean isPrivate() {
-        return isPrivate;
-    }
-    
-    public void setPrivate(boolean isPrivate) {
-        this.isPrivate = isPrivate;
-    }
-    
     public String getType() {
         return type;
     }
@@ -50,7 +42,13 @@ public class CreateGroupDTO {
     public void setType(String type) {
         this.type = type;
     }
+    
+    public String getPhotoUrl() {
+        return photoUrl;
+    }
+    
+    public void setPhotoUrl(String photoUrl) {
+        this.photoUrl = photoUrl;
+    }
 }
-
-
 

@@ -22,3 +22,5 @@ public interface GroupRepository extends JpaRepository<Group, String> {
     List<Group> findByNameIgnoreCaseContaining(String name);
 }
 
+
+

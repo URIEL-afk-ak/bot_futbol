@@ -3,6 +3,7 @@ package com.botfutbol;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.cache.annotation.EnableCaching;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * Clase principal de la aplicación Bot de Fútbol con Spring Boot.
@@ -10,6 +11,7 @@ import org.springframework.cache.annotation.EnableCaching;
  */
 @SpringBootApplication
 @EnableCaching
+@EnableScheduling
 public class BotFutbolApplication {
     
     /**

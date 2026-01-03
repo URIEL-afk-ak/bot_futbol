@@ -8,7 +8,9 @@ import com.botfutbol.entity.Group;
 import com.botfutbol.entity.PlayerRating;
 import com.botfutbol.entity.User;
 import com.botfutbol.repository.AttendanceVoteRepository;
+import com.botfutbol.repository.EventTeamRepository;
 import com.botfutbol.repository.GameEventRepository;
+import com.botfutbol.repository.GroupMemberRepository;
 import com.botfutbol.repository.GroupRepository;
 import com.botfutbol.repository.PlayerRatingRepository;
 import com.botfutbol.repository.UserRepository;
@@ -18,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -33,22 +36,34 @@ public class GameEventService {
     private final GameEventRepository gameEventRepository;
     private final AttendanceVoteRepository attendanceVoteRepository;
     private final GroupRepository groupRepository;
+    private final GroupMemberRepository groupMemberRepository;
     private final UserRepository userRepository;
     private final GroupService groupService;
     private final PlayerRatingRepository playerRatingRepository;
+    private final NotificationService notificationService;
+    private final EventTeamRepository eventTeamRepository;
+    private final com.botfutbol.service.GroupMessageService groupMessageService;
     
     public GameEventService(GameEventRepository gameEventRepository,
                            AttendanceVoteRepository attendanceVoteRepository,
                            GroupRepository groupRepository,
+                           GroupMemberRepository groupMemberRepository,
                            UserRepository userRepository,
                            GroupService groupService,
-                           PlayerRatingRepository playerRatingRepository) {
+                           PlayerRatingRepository playerRatingRepository,
+                           NotificationService notificationService,
+                           EventTeamRepository eventTeamRepository,
+                           com.botfutbol.service.GroupMessageService groupMessageService) {
         this.gameEventRepository = gameEventRepository;
         this.attendanceVoteRepository = attendanceVoteRepository;
         this.groupRepository = groupRepository;
+        this.groupMemberRepository = groupMemberRepository;
         this.userRepository = userRepository;
         this.groupService = groupService;
         this.playerRatingRepository = playerRatingRepository;
+        this.notificationService = notificationService;
+        this.eventTeamRepository = eventTeamRepository;
+        this.groupMessageService = groupMessageService;
     }
     
     /**
@@ -73,6 +88,33 @@ public class GameEventService {
         GameEvent event = new GameEvent(group, date, location, costPerPlayer, maxPlayers, votingDeadline, user);
         event = gameEventRepository.save(event);
         
+        // Enviar mensaje automático al chat del grupo
+        String eventDateStr = date.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm"));
+        String locationStr = location != null && !location.trim().isEmpty() ? " en " + location : "";
+        String message = String.format("🏆 Nuevo partido creado\n📅 Fecha: %s%s\n👥 Máximo de jugadores: %s\n💰 Costo por jugador: %s",
+                eventDateStr,
+                locationStr,
+                maxPlayers != null ? maxPlayers.toString() : "Sin límite",
+                costPerPlayer != null ? "$" + costPerPlayer : "Gratis");
+        try {
+            groupMessageService.createSystemMessage(groupId, message);
+        } catch (Exception e) {
+            logger.warn("Error al enviar mensaje al chat del grupo: {}", e.getMessage());
+        }
+        
+        // Notificar a todos los miembros del grupo sobre el nuevo evento
+        List<com.botfutbol.entity.GroupMember> members = groupMemberRepository.findByGroup(group);
+        for (com.botfutbol.entity.GroupMember member : members) {
+            notificationService.createGameEventNotification(
+                member.getUser(),
+                "Nuevo partido creado",
+                "Se creó un nuevo partido en \"" + group.getName() + "\" para el " + eventDateStr + locationStr,
+                NotificationService.TYPE_EVENT_CREATED,
+                event.getId(),
+                groupId
+            );
+        }
+        
         logger.info("Evento creado exitosamente con ID: {}", event.getId());
         return convertToDTO(event);
     }
@@ -91,11 +133,31 @@ public class GameEventService {
             throw new IllegalStateException("Solo los administradores pueden registrar eventos");
         }
         
+        // Verificar que el evento esté activo
+        if (!event.isActive()) {
+            throw new IllegalStateException("El evento ya está finalizado");
+        }
+        
         // Marcar evento como inactivo (completado)
         event.setActive(false);
         event = gameEventRepository.save(event);
         
-        logger.info("Evento {} registrado exitosamente", eventId);
+        // Notificar a todos los participantes que asistieron para que califiquen
+        List<AttendanceVote> confirmedVotes = attendanceVoteRepository.findByEventAndAttendingTrue(event);
+        String eventDateStr = event.getDate().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm"));
+        for (AttendanceVote vote : confirmedVotes) {
+            notificationService.createGameEventNotification(
+                vote.getUser(),
+                "Evento finalizado - Califica a los jugadores",
+                "El partido del " + eventDateStr + " en \"" + event.getGroup().getName() + "\" ha finalizado. ¡Califica a tus compañeros!",
+                NotificationService.TYPE_GAME_UPDATE,
+                event.getId(),
+                event.getGroup().getId()
+            );
+        }
+        
+        logger.info("Evento {} registrado exitosamente. Notificaciones enviadas a {} participantes", 
+                   eventId, confirmedVotes.size());
         return convertToDTO(event);
     }
     
@@ -170,12 +232,127 @@ public class GameEventService {
     }
     
     /**
+     * Obtiene todos los eventos históricos (completados/inactivos) de un grupo.
+     */
+    @Transactional(readOnly = true)
+    public List<GameEventDTO> getHistoricalEventsByGroup(String groupId) {
+        logger.debug("Obteniendo eventos históricos del grupo {}", groupId);
+        
+        Group group = groupRepository.findById(groupId)
+                .orElseThrow(() -> new IllegalArgumentException("Grupo no encontrado"));
+        
+        List<GameEvent> events = gameEventRepository.findByGroupAndActiveFalseOrderByDateDesc(group);
+        return events.stream()
+                .map(this::convertToDTO)
+                .collect(Collectors.toList());
+    }
+    
+    /**
      * Obtiene un evento por ID.
      */
     @Transactional(readOnly = true)
     public GameEventDTO getEventById(String eventId) {
         GameEvent event = gameEventRepository.findById(eventId)
                 .orElseThrow(() -> new IllegalArgumentException("Evento no encontrado"));
+        return convertToDTO(event);
+    }
+    
+    /**
+     * Cancela un evento (solo administradores).
+     */
+    public GameEventDTO cancelEvent(String eventId, Long userId) {
+        logger.info("Cancelando evento {} por usuario {}", eventId, userId);
+        
+        GameEvent event = gameEventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("Evento no encontrado"));
+        
+        // Verificar que el usuario es administrador del grupo
+        if (!groupService.isUserAdminOfGroup(event.getGroup().getId(), userId)) {
+            throw new IllegalStateException("Solo los administradores pueden cancelar eventos");
+        }
+        
+        // Verificar que el evento esté activo
+        if (!event.isActive()) {
+            throw new IllegalStateException("El evento ya está cancelado o completado");
+        }
+        
+        // Marcar evento como inactivo (cancelado)
+        event.setActive(false);
+        event = gameEventRepository.save(event);
+        
+        // Notificar a todos los miembros que confirmaron asistencia
+        List<AttendanceVote> confirmedVotes = attendanceVoteRepository.findByEventAndAttendingTrue(event);
+        for (AttendanceVote vote : confirmedVotes) {
+            notificationService.createGameEventNotification(
+                vote.getUser(),
+                "Evento cancelado",
+                "El partido del " + event.getDate().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")) + 
+                " en \"" + event.getGroup().getName() + "\" ha sido cancelado",
+                NotificationService.TYPE_GAME_UPDATE,
+                event.getId(),
+                event.getGroup().getId()
+            );
+        }
+        
+        logger.info("Evento {} cancelado exitosamente", eventId);
+        return convertToDTO(event);
+    }
+    
+    /**
+     * Actualiza un evento (solo administradores).
+     */
+    public GameEventDTO updateEvent(String eventId, LocalDateTime date, String location,
+                                    Double costPerPlayer, Integer maxPlayers,
+                                    LocalDateTime votingDeadline, Long userId) {
+        logger.info("Actualizando evento {} por usuario {}", eventId, userId);
+        
+        GameEvent event = gameEventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("Evento no encontrado"));
+        
+        // Verificar que el usuario es administrador del grupo
+        if (!groupService.isUserAdminOfGroup(event.getGroup().getId(), userId)) {
+            throw new IllegalStateException("Solo los administradores pueden actualizar eventos");
+        }
+        
+        // Verificar que el evento esté activo
+        if (!event.isActive()) {
+            throw new IllegalStateException("No se puede actualizar un evento cancelado o completado");
+        }
+        
+        // Actualizar campos
+        if (date != null) {
+            event.setDate(date);
+        }
+        if (location != null) {
+            event.setLocation(location);
+        }
+        if (costPerPlayer != null) {
+            event.setCostPerPlayer(costPerPlayer);
+        }
+        if (maxPlayers != null) {
+            event.setMaxPlayers(maxPlayers);
+        }
+        if (votingDeadline != null) {
+            event.setVotingDeadline(votingDeadline);
+        }
+        
+        event = gameEventRepository.save(event);
+        
+        // Notificar a todos los miembros que confirmaron asistencia
+        List<AttendanceVote> confirmedVotes = attendanceVoteRepository.findByEventAndAttendingTrue(event);
+        String eventDateStr = event.getDate().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm"));
+        for (AttendanceVote vote : confirmedVotes) {
+            notificationService.createGameEventNotification(
+                vote.getUser(),
+                "Evento actualizado",
+                "El partido en \"" + event.getGroup().getName() + "\" ha sido actualizado. Nueva fecha: " + eventDateStr,
+                NotificationService.TYPE_GAME_UPDATE,
+                event.getId(),
+                event.getGroup().getId()
+            );
+        }
+        
+        logger.info("Evento {} actualizado exitosamente", eventId);
         return convertToDTO(event);
     }
     
@@ -193,6 +370,41 @@ public class GameEventService {
         return votes.stream()
                 .map(this::convertVoteToDTO)
                 .collect(Collectors.toList());
+    }
+    
+    /**
+     * Obtiene la lista de usuarios que asistieron al evento, excluyendo al usuario actual
+     * (para calificación).
+     */
+    @Transactional(readOnly = true)
+    public List<AttendanceVoteDTO> getAttendeesForRating(String eventId, Long currentUserId) {
+        logger.debug("Obteniendo lista de asistentes para calificar en evento {} (excluyendo usuario {})", 
+                    eventId, currentUserId);
+        
+        GameEvent event = gameEventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("Evento no encontrado"));
+        
+        List<AttendanceVote> votes = attendanceVoteRepository.findByEventAndAttendingTrue(event);
+        return votes.stream()
+                .filter(vote -> !vote.getUser().getId().equals(currentUserId)) // Excluir usuario actual
+                .map(this::convertVoteToDTO)
+                .collect(Collectors.toList());
+    }
+    
+    /**
+     * Obtiene las calificaciones que un usuario ya hizo en un evento.
+     */
+    @Transactional(readOnly = true)
+    public List<PlayerRating> getRatingsByUserForEvent(String eventId, Long userId) {
+        logger.debug("Obteniendo calificaciones del usuario {} para evento {}", userId, eventId);
+        
+        GameEvent event = gameEventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("Evento no encontrado"));
+        
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
+        
+        return playerRatingRepository.findByEventAndRatedBy(event, user);
     }
     
     /**
@@ -225,6 +437,70 @@ public class GameEventService {
     }
     
     /**
+     * Guarda los equipos formados para un evento.
+     * Los equipos vienen con Player, pero se guardan con User.
+     */
+    public void saveEventTeams(String eventId, List<com.botfutbol.entity.Team> teams, List<User> confirmedUsers) {
+        logger.info("Guardando {} equipos para evento {}", teams.size(), eventId);
+        
+        GameEvent event = gameEventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("Evento no encontrado"));
+        
+        // Eliminar equipos anteriores si existen
+        eventTeamRepository.deleteByEvent(event);
+        
+        // Guardar nuevos equipos
+        for (com.botfutbol.entity.Team team : teams) {
+            com.botfutbol.entity.EventTeam eventTeam = new com.botfutbol.entity.EventTeam(
+                    event, team.getId(), team.getName());
+            
+            // Convertir Player a User
+            List<User> teamUsers = new ArrayList<>();
+            for (com.botfutbol.entity.Player player : team.getPlayers()) {
+                if (player.getUser() != null) {
+                    teamUsers.add(player.getUser());
+                } else {
+                    // Si el player no tiene user, buscar por nombre en confirmedUsers
+                    String playerName = player.getName();
+                    User matchingUser = confirmedUsers.stream()
+                            .filter(u -> (u.getNombre() + " " + u.getApellido()).equals(playerName))
+                            .findFirst()
+                            .orElse(null);
+                    if (matchingUser != null) {
+                        teamUsers.add(matchingUser);
+                    }
+                }
+            }
+            eventTeam.setPlayers(teamUsers);
+            
+            // Calcular promedio de habilidad
+            int avgSkill = team.getPlayers().isEmpty() ? 0 : 
+                    team.getPlayers().stream()
+                            .mapToInt(com.botfutbol.entity.Player::getSkillLevel)
+                            .sum() / team.getPlayers().size();
+            eventTeam.setAverageSkill(avgSkill);
+            
+            eventTeamRepository.save(eventTeam);
+        }
+        
+        // Marcar que los equipos fueron formados
+        markTeamsFormed(eventId);
+    }
+    
+    /**
+     * Obtiene los equipos formados para un evento.
+     */
+    @Transactional(readOnly = true)
+    public List<com.botfutbol.entity.EventTeam> getEventTeams(String eventId) {
+        logger.debug("Obteniendo equipos formados para evento {}", eventId);
+        
+        GameEvent event = gameEventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("Evento no encontrado"));
+        
+        return eventTeamRepository.findByEventOrderByTeamId(event);
+    }
+    
+    /**
      * Obtiene la entidad GameEvent por ID (para uso interno).
      */
     @Transactional(readOnly = true)
@@ -234,9 +510,40 @@ public class GameEventService {
     }
     
     /**
-     * Califica a un jugador después de un evento (1-10).
+     * Verifica si se puede calificar jugadores en un evento.
+     * Solo se puede calificar durante 2 horas después de que termine el evento.
      */
-    public PlayerRating ratePlayer(String eventId, Long playerUserId, Long ratedByUserId, int rating, String comment) {
+    public boolean canRatePlayers(String eventId) {
+        GameEvent event = gameEventRepository.findById(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("Evento no encontrado"));
+        
+        // Verificar que el evento está registrado (completado)
+        if (event.isActive()) {
+            return false;
+        }
+        
+        // Calcular si han pasado menos de 2 horas desde la fecha del evento
+        java.time.LocalDateTime eventDate = event.getDate();
+        java.time.LocalDateTime now = java.time.LocalDateTime.now();
+        
+        // Verificar que el evento ya haya pasado
+        if (eventDate.isAfter(now)) {
+            return false;
+        }
+        
+        java.time.Duration duration = java.time.Duration.between(eventDate, now);
+        long hoursPassed = duration.toHours();
+        
+        // Permitir calificar solo durante 2 horas después del evento
+        // Si han pasado menos de 2 horas, se puede calificar
+        return hoursPassed >= 0 && hoursPassed < 2;
+    }
+    
+    /**
+     * Califica a un jugador después de un evento (1-10).
+     * Solo se puede calificar durante 2 horas después de que termine el evento.
+     */
+    public PlayerRating ratePlayer(String eventId, Long playerUserId, Long ratedByUserId, double rating, String comment) {
         logger.info("Usuario {} calificando a jugador {} con nota {} en evento {}", 
                    ratedByUserId, playerUserId, rating, eventId);
         
@@ -246,6 +553,11 @@ public class GameEventService {
         // Verificar que el evento está registrado (completado)
         if (event.isActive()) {
             throw new IllegalStateException("Solo se pueden calificar jugadores en eventos registrados/completados");
+        }
+        
+        // Verificar que no hayan pasado más de 2 horas desde el evento
+        if (!canRatePlayers(eventId)) {
+            throw new IllegalStateException("El tiempo para calificar jugadores ha expirado. Solo puedes calificar durante 2 horas después de que termine el evento.");
         }
         
         // Verificar que el usuario que califica asistió al evento
@@ -276,8 +588,8 @@ public class GameEventService {
         }
         
         // Validar rango de calificación
-        if (rating < 1 || rating > 10) {
-            throw new IllegalArgumentException("La calificación debe estar entre 1 y 10");
+        if (rating < 0 || rating > 10) {
+            throw new IllegalArgumentException("La calificación debe estar entre 0 y 10");
         }
         
         // Buscar si ya existe una calificación

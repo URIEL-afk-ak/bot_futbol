@@ -2,17 +2,18 @@ package com.botfutbol.dto;
 
 /**
  * DTO para calificar a un jugador.
+ * La calificación puede ser decimal (0.0 a 10.0).
  */
 public class RatePlayerDTO {
     private String eventId;
     private Long playerUserId;
-    private int rating; // 1-10
+    private double rating; // 0-10 (puede ser decimal)
     private String comment; // Opcional
     
     public RatePlayerDTO() {
     }
     
-    public RatePlayerDTO(String eventId, Long playerUserId, int rating, String comment) {
+    public RatePlayerDTO(String eventId, Long playerUserId, double rating, String comment) {
         this.eventId = eventId;
         this.playerUserId = playerUserId;
         this.rating = rating;
@@ -37,11 +38,11 @@ public class RatePlayerDTO {
         this.playerUserId = playerUserId;
     }
     
-    public int getRating() {
+    public double getRating() {
         return rating;
     }
     
-    public void setRating(int rating) {
+    public void setRating(double rating) {
         this.rating = rating;
     }
     
@@ -53,4 +54,6 @@ public class RatePlayerDTO {
         this.comment = comment;
     }
 }
+
+
 

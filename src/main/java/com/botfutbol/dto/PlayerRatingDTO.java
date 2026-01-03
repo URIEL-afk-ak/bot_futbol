@@ -14,7 +14,7 @@ public class PlayerRatingDTO {
     private String playerUsername;
     private Long ratedByUserId;
     private String ratedByName;
-    private int rating;
+    private double rating;
     private String comment;
     private LocalDateTime ratedAt;
     
@@ -23,7 +23,7 @@ public class PlayerRatingDTO {
     
     public PlayerRatingDTO(String id, String eventId, String eventName, Long playerUserId, 
                           String playerName, String playerUsername, Long ratedByUserId, 
-                          String ratedByName, int rating, String comment, LocalDateTime ratedAt) {
+                          String ratedByName, double rating, String comment, LocalDateTime ratedAt) {
         this.id = id;
         this.eventId = eventId;
         this.eventName = eventName;
@@ -103,11 +103,11 @@ public class PlayerRatingDTO {
         this.ratedByName = ratedByName;
     }
     
-    public int getRating() {
+    public double getRating() {
         return rating;
     }
     
-    public void setRating(int rating) {
+    public void setRating(double rating) {
         this.rating = rating;
     }
     
@@ -127,4 +127,6 @@ public class PlayerRatingDTO {
         this.ratedAt = ratedAt;
     }
 }
+
+
 

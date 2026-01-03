@@ -20,9 +20,45 @@ import java.util.stream.Collectors;
 public class TeamService {
     
     private final PlayerRepository playerRepository;
+    private final GameEventService gameEventService;
     
-    public TeamService(PlayerRepository playerRepository) {
+    public TeamService(PlayerRepository playerRepository, 
+                      GameEventService gameEventService) {
         this.playerRepository = playerRepository;
+        this.gameEventService = gameEventService;
+    }
+    
+    /**
+     * Obtiene el promedio general de calificaciones de un jugador.
+     * Este es el promedio que se calcula sumando TODOS los puntajes que el jugador
+     * ha recibido a lo largo de todos los eventos y dividiendo por el total de calificaciones.
+     * Es el promedio general, no el promedio por partido ni por grupo.
+     * Si no tiene calificaciones, usa el skillLevel como fallback.
+     */
+    private double getPlayerRatingAverage(User user) {
+        try {
+            // Obtener el promedio general: suma de todos los puntajes / total de calificaciones
+            Double average = gameEventService.getPlayerAverageRating(user.getId());
+            // Si tiene calificaciones, usar el promedio general
+            if (average != null && average > 0) {
+                return average;
+            }
+        } catch (Exception e) {
+            // Si hay error, continuar con skillLevel
+        }
+        
+        // Fallback: usar skillLevel del primer jugador activo del usuario
+        List<Player> userPlayers = playerRepository.findByUser(user);
+        if (!userPlayers.isEmpty()) {
+            Player player = userPlayers.stream()
+                    .filter(Player::isActivo)
+                    .findFirst()
+                    .orElse(userPlayers.get(0));
+            return player.getSkillLevel();
+        }
+        
+        // Si no tiene jugadores, retornar 5 (promedio)
+        return 5.0;
     }
     
     /**
@@ -189,11 +225,40 @@ public class TeamService {
     
     /**
      * Genera equipos balanceados por habilidad desde una lista de usuarios confirmados.
+     * Usa el promedio de calificaciones de los jugadores en lugar de skillLevel.
      */
     public List<Team> generateBalancedTeamsFromUsers(List<User> confirmedUsers) {
+        return generateBalancedTeamsFromUsers(confirmedUsers, null);
+    }
+    
+    /**
+     * Genera equipos balanceados por habilidad desde una lista de usuarios confirmados.
+     * Usa el promedio general de calificaciones de los jugadores (suma de todos los puntajes / total de calificaciones).
+     * Este es el promedio general, no el promedio por partido ni por grupo.
+     * @param groupId Parámetro ignorado - siempre se usa el promedio general.
+     */
+    public List<Team> generateBalancedTeamsFromUsers(List<User> confirmedUsers, String groupId) {
+        // Crear una lista de usuarios con sus promedios generales
+        // El promedio general es la suma de TODOS los puntajes que el jugador ha recibido
+        // a lo largo de todos los eventos, dividido por el total de calificaciones
+        List<Map.Entry<User, Double>> usersWithRatings = new ArrayList<>();
+        for (User user : confirmedUsers) {
+            // Siempre usar el promedio general (todas las calificaciones)
+            double rating = getPlayerRatingAverage(user);
+            usersWithRatings.add(new AbstractMap.SimpleEntry<>(user, rating));
+        }
+        
+        if (usersWithRatings.size() < 2) {
+            throw new IllegalStateException("Se necesitan al menos 2 usuarios confirmados para formar equipos");
+        }
+        
+        // Ordenar por promedio de calificaciones (descendente)
+        usersWithRatings.sort((e1, e2) -> Double.compare(e2.getValue(), e1.getValue()));
+        
         // Obtener jugadores de todos los usuarios confirmados
         List<Player> allPlayers = new ArrayList<>();
-        for (User user : confirmedUsers) {
+        for (Map.Entry<User, Double> entry : usersWithRatings) {
+            User user = entry.getKey();
             List<Player> userPlayers = playerRepository.findByUser(user);
             if (!userPlayers.isEmpty()) {
                 Player player = userPlayers.stream()
@@ -207,13 +272,6 @@ public class TeamService {
                 allPlayers.add(tempPlayer);
             }
         }
-        
-        if (allPlayers.size() < 2) {
-            throw new IllegalStateException("Se necesitan al menos 2 usuarios confirmados para formar equipos");
-        }
-        
-        // Ordenar jugadores por habilidad (descendente)
-        allPlayers.sort((p1, p2) -> Integer.compare(p2.getSkillLevel(), p1.getSkillLevel()));
         
         Team teamA = new Team("A", "Equipo A");
         Team teamB = new Team("B", "Equipo B");
@@ -235,21 +293,38 @@ public class TeamService {
      * Divide jugadores por posición (POR, DEF, MED, DEL) y distribuye equitativamente.
      */
     public List<Team> generateTeamsByPositionFromUsers(List<User> confirmedUsers, boolean balance) {
+        return generateTeamsByPositionFromUsers(confirmedUsers, balance, null);
+    }
+    
+    /**
+     * Genera equipos por posición desde una lista de usuarios confirmados.
+     * Divide jugadores por posición (POR, DEF, MED, DEL) y distribuye equitativamente.
+     * Usa el promedio general de calificaciones (suma de todos los puntajes / total de calificaciones).
+     * @param groupId Parámetro ignorado - siempre se usa el promedio general.
+     */
+    public List<Team> generateTeamsByPositionFromUsers(List<User> confirmedUsers, boolean balance, String groupId) {
         // Obtener jugadores de todos los usuarios confirmados
         List<Player> allPlayers = new ArrayList<>();
+        Map<Player, Double> playerRatings = new HashMap<>();
+        
         for (User user : confirmedUsers) {
             List<Player> userPlayers = playerRepository.findByUser(user);
+            Player player;
             if (!userPlayers.isEmpty()) {
-                Player player = userPlayers.stream()
+                player = userPlayers.stream()
                         .filter(Player::isActivo)
                         .findFirst()
                         .orElse(userPlayers.get(0));
-                allPlayers.add(player);
             } else {
-                Player tempPlayer = new Player(user.getNombre() + " " + user.getApellido());
-                tempPlayer.setUser(user);
-                allPlayers.add(tempPlayer);
+                player = new Player(user.getNombre() + " " + user.getApellido());
+                player.setUser(user);
             }
+            allPlayers.add(player);
+            
+            // Siempre usar el promedio general (todas las calificaciones)
+            // El promedio general es la suma de TODOS los puntajes / total de calificaciones
+            double rating = getPlayerRatingAverage(user);
+            playerRatings.put(player, rating);
         }
         
         if (allPlayers.size() < 2) {
@@ -276,9 +351,13 @@ public class TeamService {
             List<Player> b = new ArrayList<>();
             
             if (balance) {
-                // Ordenar por habilidad descendente
+                // Ordenar por promedio de calificaciones descendente
                 List<Player> sorted = new ArrayList<>(list);
-                sorted.sort((p1, p2) -> Integer.compare(p2.getSkillLevel(), p1.getSkillLevel()));
+                sorted.sort((p1, p2) -> {
+                    double r1 = playerRatings.getOrDefault(p1, (double) p1.getSkillLevel());
+                    double r2 = playerRatings.getOrDefault(p2, (double) p2.getSkillLevel());
+                    return Double.compare(r2, r1);
+                });
                 for (int i = 0; i < sorted.size(); i++) {
                     if (i % 2 == 0) {
                         a.add(sorted.get(i));

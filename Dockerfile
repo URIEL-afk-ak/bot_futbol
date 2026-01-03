@@ -17,10 +17,10 @@ WORKDIR /app
 # Copiar JAR compilado desde la etapa de build
 COPY --from=build /app/target/bot-futbol-*.jar app.jar
 
-# Exponer puerto (Render usa la variable PORT)
+# Exponer puerto
 EXPOSE 8080
 
-# Variables de entorno por defecto (se sobreescriben en Render)
+# Variables de entorno por defecto
 ENV JAVA_OPTS="-Xmx512m -Xms256m"
 
 # Comando de inicio

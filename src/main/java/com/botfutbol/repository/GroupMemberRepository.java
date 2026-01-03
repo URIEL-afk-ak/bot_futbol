@@ -34,3 +34,5 @@ public interface GroupMemberRepository extends JpaRepository<GroupMember, String
     List<GroupMember> findByGroupAndRole(Group group, GroupMember.MemberRole role);
 }
 
+
+

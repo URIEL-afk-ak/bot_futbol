@@ -15,10 +15,11 @@ import com.botfutbol.service.PlayerService;
 import com.botfutbol.service.TeamService;
 import com.botfutbol.service.UserService;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -39,6 +40,8 @@ import java.util.Optional;
 @CrossOrigin(origins = "*")
 public class BotController {
     
+    private static final Logger logger = LoggerFactory.getLogger(BotController.class);
+    
     private final PlayerService playerService;
     private final TeamService teamService;
     private final PaymentService paymentService;
@@ -47,6 +50,10 @@ public class BotController {
     private final GroupService groupService;
     private final GameEventService gameEventService;
     private final UserService userService;
+    private final com.botfutbol.service.NotificationService notificationService;
+    private final com.botfutbol.service.GroupPlayerRatingService groupPlayerRatingService;
+    private final com.botfutbol.service.GroupMessageService groupMessageService;
+    private final com.botfutbol.service.GroupPollService groupPollService;
     
     public BotController(PlayerService playerService,
                          TeamService teamService,
@@ -55,7 +62,11 @@ public class BotController {
                          ChatParsingService chatParsingService,
                          GroupService groupService,
                          GameEventService gameEventService,
-                         UserService userService) {
+                         UserService userService,
+                         com.botfutbol.service.NotificationService notificationService,
+                         com.botfutbol.service.GroupPlayerRatingService groupPlayerRatingService,
+                         com.botfutbol.service.GroupMessageService groupMessageService,
+                         com.botfutbol.service.GroupPollService groupPollService) {
         this.playerService = playerService;
         this.teamService = teamService;
         this.paymentService = paymentService;
@@ -64,6 +75,10 @@ public class BotController {
         this.groupService = groupService;
         this.gameEventService = gameEventService;
         this.userService = userService;
+        this.notificationService = notificationService;
+        this.groupPlayerRatingService = groupPlayerRatingService;
+        this.groupMessageService = groupMessageService;
+        this.groupPollService = groupPollService;
     }
     
     // ==================== REST API ENDPOINTS ====================
@@ -848,25 +863,40 @@ public class BotController {
      */
     @PostMapping("/login")
     public ResponseEntity<Map<String, Object>> login(@Valid @RequestBody com.botfutbol.dto.LoginDTO loginData) {
-        String email = loginData.getEmail();
-        String password = loginData.getPassword();
-        User user = userService.findByEmail(email);
-        
-        if (user != null && userService.checkPassword(password, user.getPassword())) {
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("message", "Login exitoso");
-            response.put("userId", user.getId());
-            response.put("nombre", user.getNombre());
-            response.put("apellido", user.getApellido());
-            response.put("email", user.getEmail());
-            response.put("username", user.getUsername());
-            return ResponseEntity.ok(response);
-        } else {
+        try {
+            String email = loginData.getEmail();
+            String password = loginData.getPassword();
+            User user = userService.findByEmail(email);
+            
+            if (user != null && userService.checkPassword(password, user.getPassword())) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", true);
+                response.put("message", "Login exitoso");
+                response.put("userId", user.getId());
+                response.put("nombre", user.getNombre());
+                response.put("apellido", user.getApellido());
+                response.put("email", user.getEmail());
+                // Manejar username de forma segura (puede ser null si la columna no existe)
+                try {
+                    response.put("username", user.getUsername() != null ? user.getUsername() : "");
+                } catch (Exception e) {
+                    // Si hay error al acceder a username (columna no existe), usar string vacío
+                    response.put("username", "");
+                }
+                return ResponseEntity.ok(response);
+            } else {
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", false);
+                response.put("message", "Credenciales inválidas");
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+            }
+        } catch (Exception e) {
+            System.err.println("Error en login: " + e.getClass().getName() + " - " + e.getMessage());
+            e.printStackTrace();
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "Credenciales inválidas");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+            response.put("message", "Error al iniciar sesión: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
     }
 
@@ -875,35 +905,68 @@ public class BotController {
      */
     @PostMapping("/register")
     public ResponseEntity<Map<String, Object>> register(@Valid @RequestBody UserDTO userDTO) {
-        // La validación de campos se hace automáticamente con @Valid
-        
-        if (userService.findByEmail(userDTO.getEmail()) != null) {
+        try {
+            // La validación de campos se hace automáticamente con @Valid
+            
+            if (userService.findByEmail(userDTO.getEmail()) != null) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", false);
+                response.put("message", "El email ya está registrado");
+                return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
+            }
+            
+            // Verificar username solo si no hay error de base de datos
+            try {
+                if (userDTO.getUsername() != null && !userDTO.getUsername().trim().isEmpty()) {
+                    String username = userDTO.getUsername().trim().toLowerCase();
+                    User existingUser = userService.findByUsername(username);
+                    if (existingUser != null) {
+                        Map<String, Object> response = new HashMap<>();
+                        response.put("success", false);
+                        response.put("message", "El nombre de usuario ya está en uso");
+                        return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
+                    }
+                }
+            } catch (Exception e) {
+                // Si hay error al buscar por username (columna no existe), continuar sin validar
+                logger.warn("No se pudo validar username (columna puede no existir): {}", e.getMessage());
+            }
+            
+            User user = new User();
+            user.setNombre(userDTO.getNombre() != null ? userDTO.getNombre().trim() : "");
+            user.setApellido(userDTO.getApellido() != null ? userDTO.getApellido().trim() : "");
+            user.setEmail(userDTO.getEmail() != null ? userDTO.getEmail().trim().toLowerCase() : "");
+            
+            if (userDTO.getUsername() != null && !userDTO.getUsername().trim().isEmpty()) {
+                user.setUsername(userDTO.getUsername().trim().toLowerCase());
+            }
+            
+            user.setPassword(userDTO.getPassword()); // El servicio lo hasheará automáticamente
+            userService.save(user);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Usuario registrado exitosamente");
+            response.put("userId", user.getId());
+            return ResponseEntity.ok(response);
+        } catch (org.springframework.dao.DataAccessException e) {
+            // Error de base de datos (probablemente columna username no existe)
+            logger.error("Error de base de datos en registro: {}", e.getMessage(), e);
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "El email ya está registrado");
-            return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
-        }
-        
-        if (userService.findByUsername(userDTO.getUsername()) != null) {
+            response.put("message", "Error de base de datos. Por favor, contacta al administrador.");
+            // Log del error completo para debugging
+            logger.error("Detalles del error: ", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        } catch (Exception e) {
+            // Log del error para debugging
+            logger.error("Error en registro: {}", e.getMessage(), e);
+            
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "El nombre de usuario ya está en uso");
-            return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
+            response.put("message", "Error al registrar usuario: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
-        
-        User user = new User();
-        user.setNombre(userDTO.getNombre().trim());
-        user.setApellido(userDTO.getApellido().trim());
-        user.setEmail(userDTO.getEmail().trim().toLowerCase());
-        user.setUsername(userDTO.getUsername().trim().toLowerCase());
-        user.setPassword(userDTO.getPassword()); // El servicio lo hasheará automáticamente
-        userService.save(user);
-        
-        Map<String, Object> response = new HashMap<>();
-        response.put("success", true);
-        response.put("message", "Usuario registrado exitosamente");
-        response.put("userId", user.getId());
-        return ResponseEntity.ok(response);
     }
     
     /**
@@ -984,7 +1047,9 @@ public class BotController {
             GroupDTO group = groupService.createGroup(
                 createGroupDTO.getName(),
                 createGroupDTO.getDescription(),
-                user.getId()
+                user.getId(),
+                createGroupDTO.isPrivate(),
+                createGroupDTO.getType()
             );
             
             Map<String, Object> response = new HashMap<>();
@@ -1024,9 +1089,10 @@ public class BotController {
             response.put("message", e.getMessage());
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
         } catch (Exception e) {
+            logger.error("Error al obtener grupos", e);
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "Error al obtener grupos");
+            response.put("message", "Error al obtener grupos: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
     }
@@ -1054,6 +1120,69 @@ public class BotController {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
             response.put("message", "Error al obtener grupo");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+    
+    /**
+     * Actualizar un grupo (solo administradores o el creador)
+     */
+    @PutMapping("/groups/{groupId}")
+    public ResponseEntity<Map<String, Object>> updateGroup(@PathVariable String groupId,
+                                                           @RequestBody UpdateGroupDTO updateGroupDTO,
+                                                           HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            GroupDTO group = groupService.updateGroup(
+                groupId,
+                updateGroupDTO.getName(),
+                updateGroupDTO.getDescription(),
+                updateGroupDTO.getType(),
+                updateGroupDTO.getPhotoUrl(),
+                user.getId()
+            );
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Grupo actualizado exitosamente");
+            response.put("group", group);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        } catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Error al actualizar grupo: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+    
+    /**
+     * Eliminar un grupo (solo administradores o el creador)
+     */
+    @DeleteMapping("/groups/{groupId}")
+    public ResponseEntity<Map<String, Object>> deleteGroup(@PathVariable String groupId,
+                                                           HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            groupService.deleteGroup(groupId, user.getId());
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Grupo eliminado exitosamente");
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        } catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Error al eliminar grupo: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
     }
@@ -1377,7 +1506,7 @@ public class BotController {
      */
     @GetMapping("/groups/{groupId}/events")
     public ResponseEntity<Map<String, Object>> getGroupEvents(@PathVariable String groupId,
-                                                               HttpServletRequest request) {
+                                                             HttpServletRequest request) {
         try {
             getUserFromRequest(request); // Autenticación
             List<GameEventDTO> events = gameEventService.getActiveEventsByGroup(groupId);
@@ -1395,6 +1524,151 @@ public class BotController {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
             response.put("message", "Error al obtener eventos");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+    
+    /**
+     * Obtener eventos históricos (completados) de un grupo
+     */
+    @GetMapping("/groups/{groupId}/events/history")
+    public ResponseEntity<Map<String, Object>> getGroupHistoricalEvents(@PathVariable String groupId,
+                                                                        HttpServletRequest request) {
+        try {
+            getUserFromRequest(request); // Autenticación
+            List<GameEventDTO> events = gameEventService.getHistoricalEventsByGroup(groupId);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("events", events);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+        } catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Error al obtener eventos históricos");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+    
+    // ==================== PUNTUACIONES INICIALES Y PROMEDIOS ====================
+    
+    /**
+     * Asignar o actualizar puntuación inicial de un jugador en un grupo (solo admin)
+     */
+    @PostMapping("/groups/{groupId}/players/{playerUserId}/initial-rating")
+    public ResponseEntity<Map<String, Object>> setInitialRating(@PathVariable String groupId,
+                                                                @PathVariable Long playerUserId,
+                                                                @RequestBody SetInitialRatingDTO ratingDTO,
+                                                                HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            com.botfutbol.entity.GroupPlayerInitialRating rating = 
+                    groupPlayerRatingService.setInitialRating(
+                            groupId, playerUserId, user.getId(), 
+                            ratingDTO.getInitialRating(), ratingDTO.getComment());
+            
+            // Convertir a DTO
+            GroupPlayerInitialRatingDTO dto = new GroupPlayerInitialRatingDTO();
+            dto.setId(rating.getId());
+            dto.setGroupId(rating.getGroup().getId());
+            dto.setGroupName(rating.getGroup().getName());
+            dto.setPlayerUserId(rating.getPlayer().getId());
+            dto.setPlayerName(rating.getPlayer().getNombre() + " " + rating.getPlayer().getApellido());
+            dto.setInitialRating(rating.getInitialRating());
+            dto.setAssignedByUserId(rating.getAssignedBy().getId());
+            dto.setAssignedByName(rating.getAssignedBy().getNombre() + " " + rating.getAssignedBy().getApellido());
+            dto.setComment(rating.getComment());
+            dto.setAssignedAt(rating.getAssignedAt());
+            dto.setUpdatedAt(rating.getUpdatedAt());
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Puntuación inicial asignada exitosamente");
+            response.put("rating", dto);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        } catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Error al asignar puntuación inicial: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+    
+    /**
+     * Obtener promedio de un jugador en un grupo (incluye puntuación inicial + partidos)
+     */
+    @GetMapping("/groups/{groupId}/players/{playerUserId}/average-rating")
+    public ResponseEntity<Map<String, Object>> getPlayerAverageRating(@PathVariable String groupId,
+                                                                      @PathVariable Long playerUserId,
+                                                                      HttpServletRequest request) {
+        try {
+            getUserFromRequest(request); // Autenticación
+            double average = groupPlayerRatingService.calculatePlayerAverageRating(groupId, playerUserId);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("averageRating", average);
+            response.put("playerUserId", playerUserId);
+            response.put("groupId", groupId);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+        } catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Error al calcular promedio");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+    
+    /**
+     * Obtener promedios de todos los jugadores de un grupo
+     */
+    @GetMapping("/groups/{groupId}/players/average-ratings")
+    public ResponseEntity<Map<String, Object>> getGroupPlayersAverageRatings(@PathVariable String groupId,
+                                                                              HttpServletRequest request) {
+        try {
+            getUserFromRequest(request); // Autenticación
+            List<com.botfutbol.entity.GroupMember> members = groupService.getGroupMembersEntities(groupId);
+            
+            List<Map<String, Object>> playerRatings = new ArrayList<>();
+            for (com.botfutbol.entity.GroupMember member : members) {
+                double average = groupPlayerRatingService.calculatePlayerAverageRating(
+                        groupId, member.getUser().getId());
+                
+                Map<String, Object> playerData = new HashMap<>();
+                playerData.put("userId", member.getUser().getId());
+                playerData.put("userName", member.getUser().getNombre() + " " + member.getUser().getApellido());
+                playerData.put("averageRating", average);
+                playerRatings.add(playerData);
+            }
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("playerRatings", playerRatings);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+        } catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Error al obtener promedios");
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
     }
@@ -1422,6 +1696,71 @@ public class BotController {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
             response.put("message", "Error al obtener evento");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+    
+    /**
+     * Cancelar un evento (solo administradores)
+     */
+    @DeleteMapping("/events/{eventId}")
+    public ResponseEntity<Map<String, Object>> cancelEvent(@PathVariable String eventId,
+                                                           HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            GameEventDTO event = gameEventService.cancelEvent(eventId, user.getId());
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Evento cancelado exitosamente");
+            response.put("event", event);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        } catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Error al cancelar evento: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+    
+    /**
+     * Actualizar un evento (solo administradores)
+     */
+    @PutMapping("/events/{eventId}")
+    public ResponseEntity<Map<String, Object>> updateEvent(@PathVariable String eventId,
+                                                            @RequestBody CreateGameEventDTO updateEventDTO,
+                                                            HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            GameEventDTO event = gameEventService.updateEvent(
+                eventId,
+                updateEventDTO.getDate(),
+                updateEventDTO.getLocation(),
+                updateEventDTO.getCostPerPlayer(),
+                updateEventDTO.getMaxPlayers(),
+                updateEventDTO.getVotingDeadline(),
+                user.getId()
+            );
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Evento actualizado exitosamente");
+            response.put("event", event);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        } catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Error al actualizar evento: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
     }
@@ -1569,8 +1908,8 @@ public class BotController {
             List<Team> teams = teamService.generateRandomTeamsFromUsers(confirmedUsers);
             List<TeamDTO> teamDTOs = teamService.convertToDTOs(teams);
             
-            // Marcar que los equipos fueron formados
-            gameEventService.markTeamsFormed(eventId);
+            // Guardar equipos formados
+            gameEventService.saveEventTeams(eventId, teams, confirmedUsers);
             
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
@@ -1607,15 +1946,27 @@ public class BotController {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
             }
             
+            // Obtener el grupo del evento para usar promedios del grupo
+            String groupId = null;
+            try {
+                com.botfutbol.entity.GameEvent event = gameEventService.getEventEntity(eventId);
+                if (event != null && event.getGroup() != null) {
+                    groupId = event.getGroup().getId();
+                }
+            } catch (Exception e) {
+                // Si no se puede obtener el grupo, usar promedio global
+            }
+            
             List<User> confirmedUsers = confirmed.stream()
                     .map(v -> userService.findById(v.getUserId()))
                     .filter(u -> u != null)
                     .collect(java.util.stream.Collectors.toList());
             
-            List<Team> teams = teamService.generateBalancedTeamsFromUsers(confirmedUsers);
+            List<Team> teams = teamService.generateBalancedTeamsFromUsers(confirmedUsers, groupId);
             List<TeamDTO> teamDTOs = teamService.convertToDTOs(teams);
             
-            gameEventService.markTeamsFormed(eventId);
+            // Guardar equipos formados
+            gameEventService.saveEventTeams(eventId, teams, confirmedUsers);
             
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
@@ -1653,15 +2004,27 @@ public class BotController {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
             }
             
+            // Obtener el grupo del evento para usar promedios del grupo
+            String groupId = null;
+            try {
+                com.botfutbol.entity.GameEvent event = gameEventService.getEventEntity(eventId);
+                if (event != null && event.getGroup() != null) {
+                    groupId = event.getGroup().getId();
+                }
+            } catch (Exception e) {
+                // Si no se puede obtener el grupo, usar promedio global
+            }
+            
             List<User> confirmedUsers = confirmed.stream()
                     .map(v -> userService.findById(v.getUserId()))
                     .filter(u -> u != null)
                     .collect(java.util.stream.Collectors.toList());
             
-            List<Team> teams = teamService.generateTeamsByPositionFromUsers(confirmedUsers, balance);
+            List<Team> teams = teamService.generateTeamsByPositionFromUsers(confirmedUsers, balance, groupId);
             List<TeamDTO> teamDTOs = teamService.convertToDTOs(teams);
             
-            gameEventService.markTeamsFormed(eventId);
+            // Guardar equipos formados
+            gameEventService.saveEventTeams(eventId, teams, confirmedUsers);
             
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
@@ -1677,6 +2040,52 @@ public class BotController {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
             response.put("message", "Error al formar equipos: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+    
+    /**
+     * Obtener equipos formados para un evento
+     */
+    @GetMapping("/events/{eventId}/teams")
+    public ResponseEntity<Map<String, Object>> getEventTeams(@PathVariable String eventId,
+                                                              HttpServletRequest request) {
+        try {
+            getUserFromRequest(request); // Autenticación
+            List<com.botfutbol.entity.EventTeam> eventTeams = gameEventService.getEventTeams(eventId);
+            
+            List<Map<String, Object>> teamsData = new ArrayList<>();
+            for (com.botfutbol.entity.EventTeam eventTeam : eventTeams) {
+                Map<String, Object> teamData = new HashMap<>();
+                teamData.put("id", eventTeam.getId());
+                teamData.put("teamId", eventTeam.getTeamId());
+                teamData.put("teamName", eventTeam.getTeamName());
+                teamData.put("averageSkill", eventTeam.getAverageSkill());
+                
+                List<Map<String, Object>> playersData = new ArrayList<>();
+                for (User player : eventTeam.getPlayers()) {
+                    Map<String, Object> playerData = new HashMap<>();
+                    playerData.put("userId", player.getId());
+                    playerData.put("userName", player.getNombre() + " " + player.getApellido());
+                    playersData.add(playerData);
+                }
+                teamData.put("players", playersData);
+                teamsData.add(teamData);
+            }
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("teams", teamsData);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+        } catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Error al obtener equipos");
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
     }
@@ -1707,6 +2116,73 @@ public class BotController {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
             response.put("message", "Error al registrar evento: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+    
+    /**
+     * Obtener jugadores que asistieron al evento para calificar (excluyendo al usuario actual)
+     */
+    @GetMapping("/events/{eventId}/attendees-for-rating")
+    public ResponseEntity<Map<String, Object>> getAttendeesForRating(@PathVariable String eventId,
+                                                                     HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            List<AttendanceVoteDTO> attendees = gameEventService.getAttendeesForRating(eventId, user.getId());
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("attendees", attendees);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+        } catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Error al obtener asistentes");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+    
+    /**
+     * Obtener calificaciones que el usuario ya hizo en un evento
+     */
+    @GetMapping("/events/{eventId}/my-ratings")
+    public ResponseEntity<Map<String, Object>> getMyRatingsForEvent(@PathVariable String eventId,
+                                                                    HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            List<com.botfutbol.entity.PlayerRating> ratings = 
+                    gameEventService.getRatingsByUserForEvent(eventId, user.getId());
+            
+            List<Map<String, Object>> ratingDTOs = new ArrayList<>();
+            for (com.botfutbol.entity.PlayerRating rating : ratings) {
+                Map<String, Object> ratingData = new HashMap<>();
+                ratingData.put("id", rating.getId());
+                ratingData.put("playerUserId", rating.getPlayer().getId());
+                ratingData.put("playerName", rating.getPlayer().getNombre() + " " + rating.getPlayer().getApellido());
+                ratingData.put("rating", rating.getRating());
+                ratingData.put("comment", rating.getComment());
+                ratingData.put("ratedAt", rating.getRatedAt());
+                ratingDTOs.add(ratingData);
+            }
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("ratings", ratingDTOs);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+        } catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Error al obtener calificaciones");
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
     }
@@ -1744,6 +2220,48 @@ public class BotController {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
             response.put("message", "Error al calificar jugador: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+    
+    /**
+     * Verificar si se puede calificar jugadores en un evento
+     */
+    @GetMapping("/events/{eventId}/can-rate")
+    public ResponseEntity<Map<String, Object>> canRatePlayers(@PathVariable String eventId,
+                                                               HttpServletRequest request) {
+        try {
+            getUserFromRequest(request); // Autenticación
+            boolean canRate = gameEventService.canRatePlayers(eventId);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("canRate", canRate);
+            
+            if (!canRate) {
+                // Obtener información del evento para calcular el tiempo restante
+                com.botfutbol.entity.GameEvent event = gameEventService.getEventEntity(eventId);
+                java.time.LocalDateTime eventDate = event.getDate();
+                java.time.LocalDateTime now = java.time.LocalDateTime.now();
+                java.time.Duration duration = java.time.Duration.between(eventDate, now);
+                long hoursPassed = duration.toHours();
+                
+                response.put("message", "El tiempo para calificar jugadores ha expirado. Solo puedes calificar durante 2 horas después de que termine el evento.");
+                response.put("hoursPassed", hoursPassed);
+            }
+            
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            response.put("canRate", false);
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+        } catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Error al verificar si se puede calificar: " + e.getMessage());
+            response.put("canRate", false);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
     }
@@ -1816,36 +2334,6 @@ public class BotController {
     }
     
     /**
-     * Obtener promedio de calificaciones de un jugador en un grupo
-     */
-    @GetMapping("/groups/{groupId}/players/{playerUserId}/average-rating")
-    public ResponseEntity<Map<String, Object>> getPlayerAverageRatingInGroup(@PathVariable String groupId,
-                                                                             @PathVariable Long playerUserId,
-                                                                             HttpServletRequest request) {
-        try {
-            getUserFromRequest(request); // Autenticación
-            Double average = gameEventService.getPlayerAverageRatingInGroup(playerUserId, groupId);
-            
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("playerUserId", playerUserId);
-            response.put("groupId", groupId);
-            response.put("averageRating", average);
-            return ResponseEntity.ok(response);
-        } catch (IllegalArgumentException e) {
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", e.getMessage());
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
-        } catch (Exception e) {
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", "Error al calcular promedio");
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
-        }
-    }
-    
-    /**
      * Método auxiliar para convertir PlayerRating a DTO
      */
     private com.botfutbol.dto.PlayerRatingDTO convertRatingToDTO(com.botfutbol.entity.PlayerRating rating) {
@@ -1867,5 +2355,534 @@ public class BotController {
                 rating.getComment(),
                 rating.getRatedAt()
         );
+    }
+    
+    // ==================== NOTIFICACIONES ====================
+    
+    /**
+     * Obtener todas las notificaciones del usuario
+     */
+    @GetMapping("/notifications")
+    public ResponseEntity<Map<String, Object>> getNotifications(HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            List<com.botfutbol.entity.Notification> notifications = notificationService.getUserNotifications(user);
+            
+            List<NotificationDTO> notificationDTOs = notifications.stream()
+                .map(this::convertNotificationToDTO)
+                .collect(java.util.stream.Collectors.toList());
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("notifications", notificationDTOs);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+        } catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Error al obtener notificaciones: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+    
+    /**
+     * Obtener notificaciones no leídas
+     */
+    @GetMapping("/notifications/unread")
+    public ResponseEntity<Map<String, Object>> getUnreadNotifications(HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            List<com.botfutbol.entity.Notification> notifications = notificationService.getUnreadNotifications(user);
+            long unreadCount = notificationService.getUnreadCount(user);
+            
+            List<NotificationDTO> notificationDTOs = notifications.stream()
+                .map(this::convertNotificationToDTO)
+                .collect(java.util.stream.Collectors.toList());
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("notifications", notificationDTOs);
+            response.put("unreadCount", unreadCount);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+        } catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Error al obtener notificaciones: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+    
+    /**
+     * Obtener contador de notificaciones no leídas
+     */
+    @GetMapping("/notifications/count")
+    public ResponseEntity<Map<String, Object>> getUnreadCount(HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            long unreadCount = notificationService.getUnreadCount(user);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("unreadCount", unreadCount);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+        } catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Error al obtener contador: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+    
+    /**
+     * Marcar una notificación como leída
+     */
+    @PutMapping("/notifications/{notificationId}/read")
+    public ResponseEntity<Map<String, Object>> markAsRead(@PathVariable Long notificationId,
+                                                           HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            notificationService.markAsRead(notificationId, user);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Notificación marcada como leída");
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        } catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Error al marcar notificación: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+    
+    /**
+     * Marcar todas las notificaciones como leídas
+     */
+    @PutMapping("/notifications/read-all")
+    public ResponseEntity<Map<String, Object>> markAllAsRead(HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            int count = notificationService.markAllAsRead(user);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", count + " notificaciones marcadas como leídas");
+            response.put("count", count);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+        } catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Error al marcar notificaciones: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+    
+    /**
+     * Eliminar una notificación
+     */
+    @DeleteMapping("/notifications/{notificationId}")
+    public ResponseEntity<Map<String, Object>> deleteNotification(@PathVariable Long notificationId,
+                                                                  HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            notificationService.deleteNotification(notificationId, user);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Notificación eliminada");
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        } catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Error al eliminar notificación: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+    
+    /**
+     * Método auxiliar para convertir Notification a DTO
+     */
+    private NotificationDTO convertNotificationToDTO(com.botfutbol.entity.Notification notification) {
+        return new NotificationDTO(
+            notification.getId(),
+            notification.getTitle(),
+            notification.getMessage(),
+            notification.getType(),
+            notification.isRead(),
+            notification.getCreatedAt(),
+            notification.getRelatedGroupId(),
+            notification.getRelatedEventId(),
+            notification.getActionUrl()
+        );
+    }
+    
+    // ==================== MENSAJES DE GRUPO ====================
+    
+    /**
+     * Obtener mensajes de un grupo
+     */
+    @GetMapping("/groups/{groupId}/messages")
+    public ResponseEntity<Map<String, Object>> getGroupMessages(@PathVariable String groupId,
+                                                                HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            List<com.botfutbol.dto.GroupMessageDTO> messages = groupMessageService.getGroupMessages(groupId, user.getId());
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("messages", messages);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        } catch (Exception e) {
+            logger.error("Error al obtener mensajes del grupo {}", groupId, e);
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Error al obtener mensajes: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+    
+    /**
+     * Enviar mensaje en un grupo
+     */
+    @PostMapping("/groups/{groupId}/messages")
+    public ResponseEntity<Map<String, Object>> sendGroupMessage(@PathVariable String groupId,
+                                                               @RequestBody Map<String, String> requestBody,
+                                                               HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            String content = requestBody.get("content");
+            if (content == null || content.trim().isEmpty()) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", false);
+                response.put("message", "El contenido del mensaje no puede estar vacío");
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+            }
+            
+            com.botfutbol.dto.GroupMessageDTO message = groupMessageService.sendMessage(groupId, user.getId(), content);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", message);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        } catch (Exception e) {
+            logger.error("Error al enviar mensaje en grupo {}", groupId, e);
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Error al enviar mensaje: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+    
+    /**
+     * Destacar un mensaje
+     */
+    @PutMapping("/groups/{groupId}/messages/{messageId}/highlight")
+    public ResponseEntity<Map<String, Object>> highlightMessage(@PathVariable String groupId,
+                                                               @PathVariable String messageId,
+                                                               HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            com.botfutbol.dto.GroupMessageDTO message = groupMessageService.highlightMessage(messageId, user.getId());
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", message);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        } catch (Exception e) {
+            logger.error("Error al destacar mensaje {}", messageId, e);
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Error al destacar mensaje: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+    
+    /**
+     * Fijar un mensaje
+     */
+    @PutMapping("/groups/{groupId}/messages/{messageId}/pin")
+    public ResponseEntity<Map<String, Object>> pinMessage(@PathVariable String groupId,
+                                                         @PathVariable String messageId,
+                                                         HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            com.botfutbol.dto.GroupMessageDTO message = groupMessageService.pinMessage(messageId, user.getId());
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", message);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        } catch (Exception e) {
+            logger.error("Error al fijar mensaje {}", messageId, e);
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Error al fijar mensaje: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+    
+    /**
+     * Eliminar mensaje para todos
+     */
+    @DeleteMapping("/groups/{groupId}/messages/{messageId}")
+    public ResponseEntity<Map<String, Object>> deleteMessageForAll(@PathVariable String groupId,
+                                                                 @PathVariable String messageId,
+                                                                 HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            groupMessageService.deleteMessageForAll(messageId, user.getId());
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Mensaje eliminado exitosamente");
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        } catch (Exception e) {
+            logger.error("Error al eliminar mensaje {}", messageId, e);
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Error al eliminar mensaje: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+    
+    /**
+     * Eliminar mensaje para el usuario actual
+     */
+    @DeleteMapping("/groups/{groupId}/messages/{messageId}/for-me")
+    public ResponseEntity<Map<String, Object>> deleteMessageForMe(@PathVariable String groupId,
+                                                                  @PathVariable String messageId,
+                                                                  HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            groupMessageService.deleteMessageForMe(messageId, user.getId());
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Mensaje eliminado para ti");
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        } catch (Exception e) {
+            logger.error("Error al eliminar mensaje {} para usuario", messageId, e);
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Error al eliminar mensaje: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+    
+    /**
+     * Editar un mensaje
+     */
+    @PutMapping("/groups/{groupId}/messages/{messageId}")
+    public ResponseEntity<Map<String, Object>> editMessage(@PathVariable String groupId,
+                                                          @PathVariable String messageId,
+                                                          @RequestBody Map<String, String> requestBody,
+                                                          HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            String newMessage = requestBody.get("content");
+            if (newMessage == null || newMessage.trim().isEmpty()) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", false);
+                response.put("message", "El contenido del mensaje no puede estar vacío");
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+            }
+            
+            com.botfutbol.dto.GroupMessageDTO message = groupMessageService.editMessage(messageId, user.getId(), newMessage);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", message);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        } catch (Exception e) {
+            logger.error("Error al editar mensaje {}", messageId, e);
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Error al editar mensaje: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+    
+    /**
+     * Crear una encuesta en un grupo
+     */
+    @PostMapping("/groups/{groupId}/polls")
+    public ResponseEntity<Map<String, Object>> createPoll(@PathVariable String groupId,
+                                                          @RequestBody Map<String, Object> requestBody,
+                                                          HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            String question = (String) requestBody.get("question");
+            @SuppressWarnings("unchecked")
+            List<String> options = (List<String>) requestBody.get("options");
+            Boolean isMultipleChoice = requestBody.get("isMultipleChoice") != null 
+                    ? (Boolean) requestBody.get("isMultipleChoice") : false;
+            String eventId = requestBody.get("eventId") != null 
+                    ? (String) requestBody.get("eventId") : null;
+            java.time.LocalDateTime expiresAt = null;
+            if (requestBody.get("expiresAt") != null) {
+                expiresAt = java.time.LocalDateTime.parse((String) requestBody.get("expiresAt"));
+            }
+            
+            if (question == null || question.trim().isEmpty()) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", false);
+                response.put("message", "La pregunta es requerida");
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+            }
+            
+            if (options == null || options.size() < 2) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", false);
+                response.put("message", "Una encuesta debe tener al menos 2 opciones");
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+            }
+            
+            com.botfutbol.dto.GroupPollDTO poll = groupPollService.createPoll(
+                    groupId, user.getId(), question, options, isMultipleChoice, expiresAt, eventId);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Encuesta creada exitosamente");
+            response.put("poll", poll);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        } catch (Exception e) {
+            logger.error("Error al crear encuesta: {}", e.getMessage(), e);
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Error al crear encuesta: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+    
+    /**
+     * Votar en una encuesta
+     */
+    @PostMapping("/polls/{pollId}/vote")
+    public ResponseEntity<Map<String, Object>> votePoll(@PathVariable String pollId,
+                                                       @RequestBody Map<String, Object> requestBody,
+                                                       HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            Integer optionIndex = (Integer) requestBody.get("optionIndex");
+            
+            if (optionIndex == null) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", false);
+                response.put("message", "El índice de opción es requerido");
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+            }
+            
+            com.botfutbol.dto.GroupPollDTO poll = groupPollService.votePoll(pollId, user.getId(), optionIndex);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Voto registrado exitosamente");
+            response.put("poll", poll);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        } catch (Exception e) {
+            logger.error("Error al votar en encuesta: {}", e.getMessage(), e);
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Error al votar: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+    
+    /**
+     * Obtener encuestas de un grupo
+     */
+    @GetMapping("/groups/{groupId}/polls")
+    public ResponseEntity<Map<String, Object>> getGroupPolls(@PathVariable String groupId,
+                                                              HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request); // Verificar autenticación
+            
+            List<com.botfutbol.dto.GroupPollDTO> polls = groupPollService.getGroupPolls(groupId, user.getId());
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("polls", polls);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            logger.error("Error al obtener encuestas: {}", e.getMessage(), e);
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Error al obtener encuestas: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
     }
 }

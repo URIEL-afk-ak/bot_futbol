@@ -32,27 +32,30 @@ public class GroupService {
     private final GroupMemberRepository groupMemberRepository;
     private final UserRepository userRepository;
     private final GroupInvitationRepository groupInvitationRepository;
+    private final NotificationService notificationService;
     
     public GroupService(GroupRepository groupRepository, 
                        GroupMemberRepository groupMemberRepository,
                        UserRepository userRepository,
-                       GroupInvitationRepository groupInvitationRepository) {
+                       GroupInvitationRepository groupInvitationRepository,
+                       NotificationService notificationService) {
         this.groupRepository = groupRepository;
         this.groupMemberRepository = groupMemberRepository;
         this.userRepository = userRepository;
         this.groupInvitationRepository = groupInvitationRepository;
+        this.notificationService = notificationService;
     }
     
     /**
      * Crea un nuevo grupo y agrega al creador como administrador.
      */
-    public GroupDTO createGroup(String name, String description, Long userId) {
-        logger.info("Creando grupo '{}' para usuario {}", name, userId);
+    public GroupDTO createGroup(String name, String description, Long userId, boolean isPrivate, String type) {
+        logger.info("Creando grupo '{}' (tipo: {}, privado: {}) para usuario {}", name, type, isPrivate, userId);
         
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
         
-        Group group = new Group(name, description, user);
+        Group group = new Group(name, description, user, isPrivate, type);
         group = groupRepository.save(group);
         
         // Agregar al creador como administrador
@@ -65,15 +68,21 @@ public class GroupService {
     
     /**
      * Un usuario se une a un grupo.
+     * Si el grupo es privado, solo se puede unir mediante invitación.
      */
     public GroupMemberDTO joinGroup(String groupId, Long userId) {
-        logger.info("Usuario {} uniéndose al grupo {}", userId, groupId);
+        logger.info("Usuario {} intentando unirse al grupo {}", userId, groupId);
         
         Group group = groupRepository.findById(groupId)
                 .orElseThrow(() -> new IllegalArgumentException("Grupo no encontrado"));
         
         if (!group.isActive()) {
             throw new IllegalStateException("El grupo no está activo");
+        }
+        
+        // Si el grupo es privado, solo se puede unir mediante invitación
+        if (group.isPrivate()) {
+            throw new IllegalStateException("Este grupo es privado. Debes ser invitado por un administrador.");
         }
         
         User user = userRepository.findById(userId)
@@ -159,6 +168,19 @@ public class GroupService {
     }
     
     /**
+     * Obtiene todas las entidades de miembros de un grupo (para uso interno).
+     */
+    @Transactional(readOnly = true)
+    public List<GroupMember> getGroupMembersEntities(String groupId) {
+        logger.debug("Obteniendo entidades de miembros del grupo {}", groupId);
+        
+        Group group = groupRepository.findById(groupId)
+                .orElseThrow(() -> new IllegalArgumentException("Grupo no encontrado"));
+        
+        return groupMemberRepository.findByGroup(group);
+    }
+    
+    /**
      * Verifica si un usuario es miembro de un grupo.
      */
     @Transactional(readOnly = true)
@@ -215,6 +237,18 @@ public class GroupService {
         
         GroupMember member = new GroupMember(group, invitedUser, GroupMember.MemberRole.MEMBER);
         member = groupMemberRepository.save(member);
+        
+        // Crear notificación para el usuario invitado
+        User inviter = userRepository.findById(inviterUserId)
+                .orElseThrow(() -> new IllegalArgumentException("Usuario que invita no encontrado"));
+        String inviterName = inviter.getNombre() + " " + inviter.getApellido();
+        notificationService.createGroupNotification(
+            invitedUser,
+            "Te agregaron a un grupo",
+            inviterName + " te agregó al grupo \"" + group.getName() + "\"",
+            NotificationService.TYPE_GROUP_INVITATION,
+            groupId
+        );
         
         logger.info("Usuario {} invitado exitosamente al grupo {}", username, groupId);
         return convertMemberToDTO(member);
@@ -305,6 +339,15 @@ public class GroupService {
         invitation.incrementUses();
         groupInvitationRepository.save(invitation);
         
+        // Crear notificación para el usuario que se unió
+        notificationService.createGroupNotification(
+            user,
+            "Te uniste a un grupo",
+            "Te uniste al grupo \"" + group.getName() + "\"",
+            NotificationService.TYPE_GROUP_JOINED,
+            group.getId()
+        );
+        
         logger.info("Usuario {} se unió al grupo {} usando código de invitación", userId, group.getId());
         return convertMemberToDTO(member);
     }
@@ -325,11 +368,72 @@ public class GroupService {
     }
     
     /**
+     * Actualiza un grupo existente (solo administradores o el creador).
+     */
+    public GroupDTO updateGroup(String groupId, String name, String description, String type, String photoUrl, Long userId) {
+        logger.info("Usuario {} actualizando grupo {}", userId, groupId);
+        
+        Group group = groupRepository.findById(groupId)
+                .orElseThrow(() -> new IllegalArgumentException("Grupo no encontrado"));
+        
+        // Verificar que el usuario es administrador o el creador
+        if (!isUserAdminOfGroup(groupId, userId) && !group.getCreatedBy().getId().equals(userId)) {
+            throw new IllegalStateException("Solo los administradores o el creador pueden editar el grupo");
+        }
+        
+        if (name != null && !name.trim().isEmpty()) {
+            group.setName(name.trim());
+        }
+        
+        if (description != null) {
+            group.setDescription(description.trim().isEmpty() ? null : description.trim());
+        }
+        
+        if (type != null) {
+            group.setType(type.trim().isEmpty() ? null : type.trim());
+        }
+        
+        if (photoUrl != null) {
+            group.setPhotoUrl(photoUrl.trim().isEmpty() ? null : photoUrl.trim());
+        }
+        
+        group = groupRepository.save(group);
+        logger.info("Grupo {} actualizado exitosamente", groupId);
+        return convertToDTO(group);
+    }
+    
+    /**
+     * Elimina un grupo (solo el creador o administradores).
+     */
+    public void deleteGroup(String groupId, Long userId) {
+        logger.info("Usuario {} eliminando grupo {}", userId, groupId);
+        
+        Group group = groupRepository.findById(groupId)
+                .orElseThrow(() -> new IllegalArgumentException("Grupo no encontrado"));
+        
+        // Verificar que el usuario es administrador o el creador
+        if (!isUserAdminOfGroup(groupId, userId) && !group.getCreatedBy().getId().equals(userId)) {
+            throw new IllegalStateException("Solo los administradores o el creador pueden eliminar el grupo");
+        }
+        
+        // Marcar el grupo como inactivo en lugar de eliminarlo físicamente
+        // Esto preserva los datos históricos (eventos, calificaciones, etc.)
+        group.setActive(false);
+        groupRepository.save(group);
+        
+        logger.info("Grupo {} eliminado (marcado como inactivo) por usuario {}", groupId, userId);
+    }
+    
+    /**
      * Convierte una entidad Group a DTO.
      */
     private GroupDTO convertToDTO(Group group) {
         int memberCount = (int) groupMemberRepository.countByGroup(group);
         String createdByName = group.getCreatedBy().getNombre() + " " + group.getCreatedBy().getApellido();
+        
+        // Manejar valores null para grupos antiguos
+        boolean isPrivate = group.isPrivate();
+        String type = group.getType() != null ? group.getType() : "FUTBOL"; // Valor por defecto
         
         return new GroupDTO(
                 group.getId(),
@@ -339,7 +443,10 @@ public class GroupService {
                 group.getCreatedBy().getId(),
                 createdByName,
                 group.isActive(),
-                memberCount
+                memberCount,
+                isPrivate,
+                type,
+                group.getPhotoUrl()
         );
     }
     
