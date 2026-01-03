@@ -27,48 +27,98 @@ public class DatabaseConfig {
     @Value("${DATABASE_URL:}")
     private String databaseUrl;
     
+    @Value("${DB_HOST:}")
+    private String dbHost;
+    
+    @Value("${DB_PORT:5432}")
+    private String dbPort;
+    
+    @Value("${DB_NAME:}")
+    private String dbName;
+    
+    @Value("${DB_USERNAME:}")
+    private String dbUsername;
+    
+    @Value("${DB_PASSWORD:}")
+    private String dbPassword;
+    
     @Bean
     @Primary
-    @ConfigurationProperties("spring.datasource")
-    public DataSourceProperties dataSourceProperties() {
-        DataSourceProperties properties = new DataSourceProperties();
+    public DataSource dataSource() {
+        String jdbcUrl;
+        String username;
+        String password;
         
-        // Si DATABASE_URL está disponible (formato Supabase/Render: postgresql://user:pass@host:port/dbname)
+        // Prioridad 1: DATABASE_URL (formato Supabase/Render: postgresql://user:pass@host:port/dbname)
         if (databaseUrl != null && !databaseUrl.isEmpty() && !databaseUrl.startsWith("jdbc:")) {
             try {
+                logger.info("🔍 Intentando parsear DATABASE_URL: {}", databaseUrl.substring(0, Math.min(50, databaseUrl.length())) + "...");
                 URI dbUri = new URI(databaseUrl.replace("postgresql://", "http://"));
                 
-                String username = dbUri.getUserInfo().split(":")[0];
-                String password = dbUri.getUserInfo().split(":")[1];
+                username = dbUri.getUserInfo().split(":")[0];
+                password = dbUri.getUserInfo().split(":")[1];
                 String host = dbUri.getHost();
                 int port = dbUri.getPort() == -1 ? 5432 : dbUri.getPort();
                 String database = dbUri.getPath().replaceFirst("/", "");
                 
-                String jdbcUrl = String.format("jdbc:postgresql://%s:%d/%s", host, port, database);
+                jdbcUrl = String.format("jdbc:postgresql://%s:%d/%s", host, port, database);
                 
-                properties.setUrl(jdbcUrl);
-                properties.setUsername(username);
-                properties.setPassword(password);
-                
-                logger.info("Configuración de base de datos desde DATABASE_URL: {}@{}:{}/{}", 
+                logger.info("✅ Configuración de base de datos desde DATABASE_URL: {}@{}:{}/{}", 
                     username, host, port, database);
             } catch (Exception e) {
-                logger.warn("Error al parsear DATABASE_URL: {}. Usando configuración por defecto.", e.getMessage());
+                logger.error("❌ Error al parsear DATABASE_URL: {}. Intentando variables individuales...", e.getMessage());
+                e.printStackTrace();
+                // Continuar con variables individuales
+                jdbcUrl = null;
+                username = null;
+                password = null;
             }
         } else {
-            logger.info("Usando configuración de base de datos desde application.properties");
+            jdbcUrl = null;
+            username = null;
+            password = null;
         }
         
-        return properties;
-    }
-    
-    @Bean
-    @Primary
-    public DataSource dataSource(DataSourceProperties properties) {
+        // Prioridad 2: Variables individuales (DB_HOST, DB_PORT, etc.)
+        if (jdbcUrl == null && dbHost != null && !dbHost.isEmpty() && 
+            dbName != null && !dbName.isEmpty() && 
+            dbUsername != null && !dbUsername.isEmpty() && 
+            dbPassword != null && !dbPassword.isEmpty()) {
+            
+            try {
+                int port = Integer.parseInt(dbPort);
+                jdbcUrl = String.format("jdbc:postgresql://%s:%d/%s", dbHost, port, dbName);
+                username = dbUsername;
+                password = dbPassword;
+                
+                logger.info("✅ Configuración de base de datos desde variables individuales: {}@{}:{}/{}", 
+                    username, dbHost, port, dbName);
+            } catch (Exception e) {
+                logger.error("❌ Error al configurar desde variables individuales: {}", e.getMessage());
+                e.printStackTrace();
+            }
+        }
+        
+        // Prioridad 3: application.properties (solo para desarrollo local)
+        if (jdbcUrl == null) {
+            logger.warn("⚠️ No se encontraron variables de entorno (DATABASE_URL o DB_*). Usando configuración de application.properties (localhost:3001)");
+            logger.warn("⚠️ Esto solo funciona en desarrollo local. Para producción, configura DATABASE_URL en Render.");
+            logger.warn("⚠️ DATABASE_URL está vacía o no configurada. Valor actual: '{}'", databaseUrl != null ? "no vacía" : "null");
+            logger.warn("⚠️ DB_HOST: '{}', DB_NAME: '{}', DB_USERNAME: '{}'", dbHost, dbName, dbUsername);
+            
+            // Usar valores por defecto de application.properties
+            DataSourceProperties defaultProperties = new DataSourceProperties();
+            jdbcUrl = defaultProperties.getUrl();
+            username = defaultProperties.getUsername();
+            password = defaultProperties.getPassword();
+        }
+        
+        logger.info("🔌 Creando DataSource para: {}@{}", username, jdbcUrl != null ? jdbcUrl.replaceAll("jdbc:postgresql://", "").split("/")[0] : "unknown");
+        
         HikariConfig config = new HikariConfig();
-        config.setJdbcUrl(properties.getUrl());
-        config.setUsername(properties.getUsername());
-        config.setPassword(properties.getPassword());
+        config.setJdbcUrl(jdbcUrl);
+        config.setUsername(username);
+        config.setPassword(password);
         config.setDriverClassName("org.postgresql.Driver");
         config.setConnectionInitSql("SELECT 1");
         config.setMaximumPoolSize(10);
