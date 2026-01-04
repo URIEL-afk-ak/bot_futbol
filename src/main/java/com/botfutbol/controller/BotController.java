@@ -54,6 +54,7 @@ public class BotController {
     private final com.botfutbol.service.GroupPlayerRatingService groupPlayerRatingService;
     private final com.botfutbol.service.GroupMessageService groupMessageService;
     private final com.botfutbol.service.GroupPollService groupPollService;
+    private final com.botfutbol.service.FCMService fcmService;
     
     public BotController(PlayerService playerService,
                          TeamService teamService,
@@ -66,7 +67,8 @@ public class BotController {
                          com.botfutbol.service.NotificationService notificationService,
                          com.botfutbol.service.GroupPlayerRatingService groupPlayerRatingService,
                          com.botfutbol.service.GroupMessageService groupMessageService,
-                         com.botfutbol.service.GroupPollService groupPollService) {
+                         com.botfutbol.service.GroupPollService groupPollService,
+                         com.botfutbol.service.FCMService fcmService) {
         this.playerService = playerService;
         this.teamService = teamService;
         this.paymentService = paymentService;
@@ -79,6 +81,7 @@ public class BotController {
         this.groupPlayerRatingService = groupPlayerRatingService;
         this.groupMessageService = groupMessageService;
         this.groupPollService = groupPollService;
+        this.fcmService = fcmService;
     }
     
     // ==================== REST API ENDPOINTS ====================
@@ -2241,13 +2244,17 @@ public class BotController {
             if (!canRate) {
                 // Obtener información del evento para calcular el tiempo restante
                 com.botfutbol.entity.GameEvent event = gameEventService.getEventEntity(eventId);
-                java.time.LocalDateTime eventDate = event.getDate();
-                java.time.LocalDateTime now = java.time.LocalDateTime.now();
-                java.time.Duration duration = java.time.Duration.between(eventDate, now);
-                long hoursPassed = duration.toHours();
-                
-                response.put("message", "El tiempo para calificar jugadores ha expirado. Solo puedes calificar durante 2 horas después de que termine el evento.");
-                response.put("hoursPassed", hoursPassed);
+                if (event.getRegisteredAt() != null) {
+                    java.time.LocalDateTime registeredAt = event.getRegisteredAt();
+                    java.time.LocalDateTime now = java.time.LocalDateTime.now();
+                    java.time.Duration duration = java.time.Duration.between(registeredAt, now);
+                    long hoursPassed = duration.toHours();
+                    
+                    response.put("message", "El tiempo para calificar jugadores ha expirado. Solo puedes calificar durante 2 horas después de que se registre el evento.");
+                    response.put("hoursPassed", hoursPassed);
+                } else {
+                    response.put("message", "El evento aún no ha sido registrado/finalizado por un administrador.");
+                }
             }
             
             return ResponseEntity.ok(response);
@@ -2899,6 +2906,74 @@ public class BotController {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
             response.put("message", "Error al obtener encuestas: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+    
+    // ==================== NOTIFICACIONES PUSH (FCM) ====================
+    
+    /**
+     * Registrar token FCM de un dispositivo
+     */
+    @PostMapping("/fcm/register")
+    public ResponseEntity<Map<String, Object>> registerFCMToken(@RequestBody Map<String, String> requestBody,
+                                                                HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            String token = requestBody.get("token");
+            String deviceType = requestBody.get("deviceType"); // "ANDROID" o "IOS"
+            String deviceName = requestBody.get("deviceName");
+            
+            if (token == null || token.trim().isEmpty()) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", false);
+                response.put("message", "El token FCM es requerido");
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+            }
+            
+            fcmService.registerToken(user, token, deviceType, deviceName);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Token FCM registrado exitosamente");
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            logger.error("Error al registrar token FCM: {}", e.getMessage(), e);
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Error al registrar token: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+    
+    /**
+     * Desactivar token FCM de un dispositivo
+     */
+    @PostMapping("/fcm/unregister")
+    public ResponseEntity<Map<String, Object>> unregisterFCMToken(@RequestBody Map<String, String> requestBody,
+                                                                  HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            String token = requestBody.get("token");
+            
+            if (token == null || token.trim().isEmpty()) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", false);
+                response.put("message", "El token FCM es requerido");
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+            }
+            
+            fcmService.unregisterToken(user, token);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Token FCM desactivado exitosamente");
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            logger.error("Error al desactivar token FCM: {}", e.getMessage(), e);
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Error al desactivar token: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
     }

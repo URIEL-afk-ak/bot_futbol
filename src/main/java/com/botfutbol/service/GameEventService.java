@@ -140,6 +140,7 @@ public class GameEventService {
         
         // Marcar evento como inactivo (completado)
         event.setActive(false);
+        event.setRegisteredAt(java.time.LocalDateTime.now()); // Guardar cuándo se registró
         event = gameEventRepository.save(event);
         
         // Notificar a todos los participantes que asistieron para que califiquen
@@ -511,7 +512,7 @@ public class GameEventService {
     
     /**
      * Verifica si se puede calificar jugadores en un evento.
-     * Solo se puede calificar durante 2 horas después de que termine el evento.
+     * Solo se puede calificar durante 2 horas después de que se REGISTRE el evento.
      */
     public boolean canRatePlayers(String eventId) {
         GameEvent event = gameEventRepository.findById(eventId)
@@ -522,19 +523,19 @@ public class GameEventService {
             return false;
         }
         
-        // Calcular si han pasado menos de 2 horas desde la fecha del evento
-        java.time.LocalDateTime eventDate = event.getDate();
-        java.time.LocalDateTime now = java.time.LocalDateTime.now();
-        
-        // Verificar que el evento ya haya pasado
-        if (eventDate.isAfter(now)) {
+        // Si no tiene fecha de registro, no se puede calificar
+        if (event.getRegisteredAt() == null) {
             return false;
         }
         
-        java.time.Duration duration = java.time.Duration.between(eventDate, now);
+        // Calcular si han pasado menos de 2 horas desde que se REGISTRÓ el evento
+        java.time.LocalDateTime registeredAt = event.getRegisteredAt();
+        java.time.LocalDateTime now = java.time.LocalDateTime.now();
+        
+        java.time.Duration duration = java.time.Duration.between(registeredAt, now);
         long hoursPassed = duration.toHours();
         
-        // Permitir calificar solo durante 2 horas después del evento
+        // Permitir calificar solo durante 2 horas después de que se registró
         // Si han pasado menos de 2 horas, se puede calificar
         return hoursPassed >= 0 && hoursPassed < 2;
     }
@@ -555,9 +556,9 @@ public class GameEventService {
             throw new IllegalStateException("Solo se pueden calificar jugadores en eventos registrados/completados");
         }
         
-        // Verificar que no hayan pasado más de 2 horas desde el evento
+        // Verificar que no hayan pasado más de 2 horas desde que se registró el evento
         if (!canRatePlayers(eventId)) {
-            throw new IllegalStateException("El tiempo para calificar jugadores ha expirado. Solo puedes calificar durante 2 horas después de que termine el evento.");
+            throw new IllegalStateException("El tiempo para calificar jugadores ha expirado. Solo puedes calificar durante 2 horas después de que se registre el evento.");
         }
         
         // Verificar que el usuario que califica asistió al evento

@@ -23,6 +23,9 @@ public class NotificationService {
     @Autowired
     private NotificationRepository notificationRepository;
     
+    @Autowired(required = false)
+    private FCMService fcmService;
+    
     // Tipos de notificaciones
     public static final String TYPE_GROUP_INVITATION = "GROUP_INVITATION";
     public static final String TYPE_GROUP_JOINED = "GROUP_JOINED";
@@ -31,6 +34,7 @@ public class NotificationService {
     public static final String TYPE_GAME_STARTING_SOON = "GAME_STARTING_SOON";
     public static final String TYPE_EVENT_CREATED = "EVENT_CREATED";
     public static final String TYPE_ATTENDANCE_REMINDER = "ATTENDANCE_REMINDER";
+    public static final String TYPE_NEW_MESSAGE = "NEW_MESSAGE";
     
     /**
      * Crea una notificación para un usuario.
@@ -39,7 +43,18 @@ public class NotificationService {
     public Notification createNotification(User user, String title, String message, String type) {
         logger.info("Creando notificación para usuario {}: {}", user.getId(), title);
         Notification notification = new Notification(user, title, message, type);
-        return notificationRepository.save(notification);
+        notification = notificationRepository.save(notification);
+        
+        // Enviar notificación push si FCMService está disponible
+        if (fcmService != null) {
+            try {
+                fcmService.sendNotificationToUser(user, title, message, type, null, null);
+            } catch (Exception e) {
+                logger.warn("Error al enviar notificación push: {}", e.getMessage());
+            }
+        }
+        
+        return notification;
     }
     
     /**
@@ -50,7 +65,18 @@ public class NotificationService {
         Notification notification = createNotification(user, title, message, type);
         notification.setRelatedGroupId(groupId);
         notification.setActionUrl("/groups/" + groupId);
-        return notificationRepository.save(notification);
+        notification = notificationRepository.save(notification);
+        
+        // Enviar notificación push con groupId
+        if (fcmService != null) {
+            try {
+                fcmService.sendNotificationToUser(user, title, message, type, groupId, null);
+            } catch (Exception e) {
+                logger.warn("Error al enviar notificación push: {}", e.getMessage());
+            }
+        }
+        
+        return notification;
     }
     
     /**
@@ -62,7 +88,18 @@ public class NotificationService {
         notification.setRelatedEventId(eventId);
         notification.setRelatedGroupId(groupId);
         notification.setActionUrl("/groups/" + groupId + "/events/" + eventId);
-        return notificationRepository.save(notification);
+        notification = notificationRepository.save(notification);
+        
+        // Enviar notificación push con groupId y eventId
+        if (fcmService != null) {
+            try {
+                fcmService.sendNotificationToUser(user, title, message, type, groupId, eventId);
+            } catch (Exception e) {
+                logger.warn("Error al enviar notificación push: {}", e.getMessage());
+            }
+        }
+        
+        return notification;
     }
     
     /**

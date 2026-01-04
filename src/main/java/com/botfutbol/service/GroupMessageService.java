@@ -3,6 +3,7 @@ package com.botfutbol.service;
 import com.botfutbol.dto.GroupMessageDTO;
 import com.botfutbol.entity.Group;
 import com.botfutbol.entity.GroupMessage;
+import com.botfutbol.entity.GroupMember;
 import com.botfutbol.entity.User;
 import com.botfutbol.entity.DeletedMessage;
 import com.botfutbol.repository.GroupMessageRepository;
@@ -32,17 +33,20 @@ public class GroupMessageService {
     private final UserRepository userRepository;
     private final GroupMemberRepository groupMemberRepository;
     private final DeletedMessageRepository deletedMessageRepository;
+    private final NotificationService notificationService;
     
     public GroupMessageService(GroupMessageRepository groupMessageRepository,
                               GroupRepository groupRepository,
                               UserRepository userRepository,
                               GroupMemberRepository groupMemberRepository,
-                              DeletedMessageRepository deletedMessageRepository) {
+                              DeletedMessageRepository deletedMessageRepository,
+                              NotificationService notificationService) {
         this.groupMessageRepository = groupMessageRepository;
         this.groupRepository = groupRepository;
         this.userRepository = userRepository;
         this.groupMemberRepository = groupMemberRepository;
         this.deletedMessageRepository = deletedMessageRepository;
+        this.notificationService = notificationService;
     }
     
     /**
@@ -66,7 +70,57 @@ public class GroupMessageService {
         groupMessage = groupMessageRepository.save(groupMessage);
         
         logger.info("Mensaje enviado exitosamente con ID: {}", groupMessage.getId());
+        
+        // Crear notificaciones para todos los miembros del grupo excepto el emisor
+        try {
+            createMessageNotifications(group, user, message);
+        } catch (Exception e) {
+            logger.warn("Error al crear notificaciones para mensaje en grupo {}: {}", groupId, e.getMessage());
+        }
+        
         return convertToDTO(groupMessage, user);
+    }
+    
+    /**
+     * Crea notificaciones para los miembros del grupo cuando se envía un mensaje.
+     */
+    private void createMessageNotifications(Group group, User sender, String messageContent) {
+        List<GroupMember> members = groupMemberRepository.findByGroup(group);
+        
+        String userName = (sender.getNombre() != null ? sender.getNombre() : "Usuario") + 
+                         (sender.getApellido() != null ? " " + sender.getApellido() : "");
+        userName = userName.trim();
+        if (userName.isEmpty()) {
+            userName = "Usuario " + sender.getId();
+        }
+        
+        // Truncar mensaje para la notificación (máximo 100 caracteres)
+        String messagePreview = messageContent.length() > 100 
+            ? messageContent.substring(0, 97) + "..." 
+            : messageContent;
+        
+        for (GroupMember member : members) {
+            // No enviar notificación al mismo usuario que envió el mensaje
+            if (member.getUser().getId().equals(sender.getId())) {
+                continue;
+            }
+            
+            try {
+                notificationService.createGroupNotification(
+                    member.getUser(),
+                    group.getName(),
+                    userName + ": " + messagePreview,
+                    NotificationService.TYPE_NEW_MESSAGE,
+                    group.getId()
+                );
+            } catch (Exception e) {
+                logger.warn("Error al crear notificación para usuario {}: {}", 
+                    member.getUser().getId(), e.getMessage());
+            }
+        }
+        
+        logger.debug("Notificaciones creadas para {} miembros del grupo {}", 
+            members.size() - 1, group.getId());
     }
     
     /**

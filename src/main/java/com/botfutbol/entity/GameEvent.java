@@ -47,6 +47,9 @@ public class GameEvent {
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
     
+    @Column(name = "registered_at")
+    private LocalDateTime registeredAt; // Fecha/hora cuando se registró/finalizó el evento
+    
     public GameEvent() {
         this.id = UUID.randomUUID().toString();
         this.active = true;
@@ -155,6 +158,14 @@ public class GameEvent {
     
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+    
+    public LocalDateTime getRegisteredAt() {
+        return registeredAt;
+    }
+    
+    public void setRegisteredAt(LocalDateTime registeredAt) {
+        this.registeredAt = registeredAt;
     }
     
     @Override
