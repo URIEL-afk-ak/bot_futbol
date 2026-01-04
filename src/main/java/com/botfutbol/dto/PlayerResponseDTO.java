@@ -6,7 +6,7 @@ package com.botfutbol.dto;
 public class PlayerResponseDTO {
     
     private String name;
-    private int skillLevel;
+    private double skillLevel;
     private int goalsScored;
     private int gamesPlayed;
     private long totalPaid;
@@ -16,7 +16,7 @@ public class PlayerResponseDTO {
     public PlayerResponseDTO() {
     }
     
-    public PlayerResponseDTO(String name, int skillLevel, int goalsScored, 
+    public PlayerResponseDTO(String name, double skillLevel, int goalsScored, 
                             int gamesPlayed, long totalPaid, long totalDebt, boolean attended) {
         this.name = name;
         this.skillLevel = skillLevel;
@@ -37,11 +37,11 @@ public class PlayerResponseDTO {
         this.name = name;
     }
     
-    public int getSkillLevel() {
+    public double getSkillLevel() {
         return skillLevel;
     }
     
-    public void setSkillLevel(int skillLevel) {
+    public void setSkillLevel(double skillLevel) {
         this.skillLevel = skillLevel;
     }
     

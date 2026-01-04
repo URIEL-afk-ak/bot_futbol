@@ -21,7 +21,7 @@ public class Player {
     private String name;
 
     @Column(name = "skill_level")
-    private int skillLevel; // 1-10, para armar equipos balanceados
+    private double skillLevel; // 1-10 con decimales (ej: 7.5), para armar equipos balanceados
 
     @Column(name = "position", length = 10)
     private String position; // NUEVO: posición (POR, DEF, MED, DEL)
@@ -65,7 +65,7 @@ public class Player {
         this.name = name;
     }
 
-    public Player(String name, int skillLevel, String position) {
+    public Player(String name, double skillLevel, String position) {
         this(name);
         this.skillLevel = skillLevel;
         this.position = position;
@@ -89,11 +89,11 @@ public class Player {
         this.name = name;
     }
 
-    public int getSkillLevel() {
+    public double getSkillLevel() {
         return skillLevel;
     }
 
-    public void setSkillLevel(int skillLevel) {
+    public void setSkillLevel(double skillLevel) {
         this.skillLevel = skillLevel;
     }
 

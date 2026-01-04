@@ -475,9 +475,9 @@ public class GameEventService {
             
             // Calcular promedio de habilidad
             int avgSkill = team.getPlayers().isEmpty() ? 0 : 
-                    team.getPlayers().stream()
-                            .mapToInt(com.botfutbol.entity.Player::getSkillLevel)
-                            .sum() / team.getPlayers().size();
+                    (int) Math.round(team.getPlayers().stream()
+                            .mapToDouble(com.botfutbol.entity.Player::getSkillLevel)
+                            .sum() / team.getPlayers().size());
             eventTeam.setAverageSkill(avgSkill);
             
             eventTeamRepository.save(eventTeam);

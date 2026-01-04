@@ -34,9 +34,9 @@ public class Team {
     }
     
     public int getTotalSkillLevel() {
-        return players.stream()
-                .mapToInt(Player::getSkillLevel)
-                .sum();
+        return (int) Math.round(players.stream()
+                .mapToDouble(Player::getSkillLevel)
+                .sum());
     }
     
     // Getters y Setters

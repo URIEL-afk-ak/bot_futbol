@@ -115,7 +115,7 @@ public class TeamService {
         }
         
         // Ordenar jugadores por habilidad (descendente)
-        allPlayers.sort((p1, p2) -> Integer.compare(p2.getSkillLevel(), p1.getSkillLevel()));
+        allPlayers.sort((p1, p2) -> Double.compare(p2.getSkillLevel(), p1.getSkillLevel()));
         
         Team teamA = new Team("A", "Equipo A");
         Team teamB = new Team("B", "Equipo B");

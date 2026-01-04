@@ -15,7 +15,7 @@ public class PlayerDTO {
     
     @Min(value = PlayerConstants.MIN_SKILL_LEVEL, message = PlayerConstants.ERROR_SKILL_LEVEL_RANGE)
     @Max(value = PlayerConstants.MAX_SKILL_LEVEL, message = PlayerConstants.ERROR_SKILL_LEVEL_RANGE)
-    private Integer skillLevel;
+    private Double skillLevel;
     
     @Size(max = PlayerConstants.MAX_POSITION_LENGTH, message = "La posición no puede exceder " + PlayerConstants.MAX_POSITION_LENGTH + " caracteres")
     private String position; // Posición (POR, DEF, MED, DEL)
@@ -27,12 +27,12 @@ public class PlayerDTO {
         this.name = name;
     }
 
-    public PlayerDTO(String name, Integer skillLevel) {
+    public PlayerDTO(String name, Double skillLevel) {
         this.name = name;
         this.skillLevel = skillLevel;
     }
 
-    public PlayerDTO(String name, Integer skillLevel, String position) {
+    public PlayerDTO(String name, Double skillLevel, String position) {
         this.name = name;
         this.skillLevel = skillLevel;
         this.position = position;
@@ -48,11 +48,11 @@ public class PlayerDTO {
         this.name = name;
     }
 
-    public Integer getSkillLevel() {
+    public Double getSkillLevel() {
         return skillLevel;
     }
 
-    public void setSkillLevel(Integer skillLevel) {
+    public void setSkillLevel(Double skillLevel) {
         this.skillLevel = skillLevel;
     }
 

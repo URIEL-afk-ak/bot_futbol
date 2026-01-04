@@ -264,7 +264,7 @@ public class ChatParsingService {
             
             // Crear nuevo jugador
             try {
-                PlayerDTO dto = new PlayerDTO(cleanName, 5, "MED");
+                PlayerDTO dto = new PlayerDTO(cleanName, 5.0, "MED");
                 Player newPlayer = playerService.addPlayer(dto, user);
                 // Solo agregar a newPlayersAdded si realmente es nuevo (no estaba inactivo)
                 if (!result.getNewPlayersAdded().contains(cleanName)) {
@@ -464,7 +464,7 @@ public class ChatParsingService {
                     } else {
                         // Crear nuevo jugador si no existe
                         try {
-                            PlayerDTO dto = new PlayerDTO(cleanName, 5, "MED");
+                            PlayerDTO dto = new PlayerDTO(cleanName, 5.0, "MED");
                             player = playerService.addPlayer(dto, user);
                             // Solo agregar a newPlayersAdded si realmente es nuevo
                             if (!result.getNewPlayersAdded().contains(cleanName)) {

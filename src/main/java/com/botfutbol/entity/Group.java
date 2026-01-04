@@ -37,8 +37,8 @@ public class Group {
     @Column(name = "type", length = 50, nullable = true)
     private String type; // "FUTBOL", "BASKET", "VOLEY", etc.
     
-    @Column(name = "photo_url", length = 500, nullable = true)
-    private String photoUrl; // URL de la foto del grupo
+    @Column(name = "photo_url", columnDefinition = "TEXT", nullable = true)
+    private String photoUrl; // URL de la foto del grupo (puede ser base64 o URL externa)
     
     public Group() {
         this.id = UUID.randomUUID().toString();

@@ -400,11 +400,11 @@ public class BotController {
         }
         
         String name = parts[1];
-        Integer skillLevel = null;
+        Double skillLevel = null;
         
         if (parts.length >= 3) {
             try {
-                skillLevel = Integer.parseInt(parts[2]);
+                skillLevel = Double.parseDouble(parts[2]);
             } catch (NumberFormatException e) {
                 return "❌ El nivel debe ser un número entre 1 y 10";
             }
@@ -413,7 +413,7 @@ public class BotController {
         PlayerDTO dto = new PlayerDTO(name, skillLevel);
         Player player = playerService.addPlayer(dto, user);
         
-        return String.format("✅ Jugador agregado: %s (Nivel: %d)", 
+        return String.format("✅ Jugador agregado: %s (Nivel: %.1f)", 
                 player.getName(), player.getSkillLevel());
     }
     

@@ -9,7 +9,7 @@ public class PlayerConstants {
     // Niveles de habilidad
     public static final int MIN_SKILL_LEVEL = 1;
     public static final int MAX_SKILL_LEVEL = 10;
-    public static final int DEFAULT_SKILL_LEVEL = 5;
+    public static final double DEFAULT_SKILL_LEVEL = 5.0;
     
     // Posiciones
     public static final String POSITION_GOALKEEPER = "POR";
