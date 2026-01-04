@@ -41,7 +41,7 @@ class PlayerServiceTest {
         
         playerDTO = new PlayerDTO();
         playerDTO.setName("Juan");
-        playerDTO.setSkillLevel(7);
+        playerDTO.setSkillLevel(7.0);
         playerDTO.setPosition("DEL");
     }
 
@@ -89,18 +89,18 @@ class PlayerServiceTest {
         Player existingPlayer = new Player();
         existingPlayer.setId("player-1");
         existingPlayer.setName("Juan");
-        existingPlayer.setSkillLevel(5);
+        existingPlayer.setSkillLevel(5.0);
         
         when(playerRepository.findByNameIgnoreCaseAndUser("Juan", testUser))
                 .thenReturn(Optional.of(existingPlayer));
         when(playerRepository.save(any(Player.class))).thenReturn(existingPlayer);
 
         // Act
-        Player result = playerService.updateSkillLevel("Juan", 8, testUser);
+        Player result = playerService.updateSkillLevel("Juan", 8.0, testUser);
 
         // Assert
         assertNotNull(result);
-        assertEquals(8, result.getSkillLevel());
+        assertEquals(8.0, result.getSkillLevel());
         verify(playerRepository, times(1)).save(existingPlayer);
     }
 
@@ -108,9 +108,9 @@ class PlayerServiceTest {
     void testUpdateSkillLevel_InvalidLevel_TooLow() {
         // Arrange
         // Act & Assert
-        IllegalArgumentException exception = assertThrows(
+        IllegalArgumentException exception =         assertThrows(
                 IllegalArgumentException.class,
-                () -> playerService.updateSkillLevel("Juan", 0, testUser)
+                () -> playerService.updateSkillLevel("Juan", 0.0, testUser)
         );
         
         assertEquals(PlayerConstants.ERROR_SKILL_LEVEL_RANGE, exception.getMessage());
@@ -121,9 +121,9 @@ class PlayerServiceTest {
     void testUpdateSkillLevel_InvalidLevel_TooHigh() {
         // Arrange
         // Act & Assert
-        IllegalArgumentException exception = assertThrows(
+        IllegalArgumentException exception =         assertThrows(
                 IllegalArgumentException.class,
-                () -> playerService.updateSkillLevel("Juan", 11, testUser)
+                () -> playerService.updateSkillLevel("Juan", 11.0, testUser)
         );
         
         assertEquals(PlayerConstants.ERROR_SKILL_LEVEL_RANGE, exception.getMessage());
@@ -137,9 +137,9 @@ class PlayerServiceTest {
                 .thenReturn(Optional.empty());
 
         // Act & Assert
-        IllegalArgumentException exception = assertThrows(
+        IllegalArgumentException exception =         assertThrows(
                 IllegalArgumentException.class,
-                () -> playerService.updateSkillLevel("Inexistente", 7, testUser)
+                () -> playerService.updateSkillLevel("Inexistente", 7.0, testUser)
         );
         
         assertTrue(exception.getMessage().contains(PlayerConstants.ERROR_PLAYER_NOT_FOUND));

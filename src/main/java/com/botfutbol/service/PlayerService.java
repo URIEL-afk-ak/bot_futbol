@@ -135,7 +135,7 @@ public class PlayerService {
     /**
      * Actualiza el nivel de habilidad de un jugador.
      */
-    public Player updateSkillLevel(String name, int skillLevel, User user) {
+    public Player updateSkillLevel(String name, double skillLevel, User user) {
         logger.info("Actualizando nivel de habilidad de jugador: {} a nivel: {}", name, skillLevel);
         
         if (skillLevel < PlayerConstants.MIN_SKILL_LEVEL || 

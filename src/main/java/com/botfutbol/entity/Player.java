@@ -50,7 +50,7 @@ public class Player {
 
     public Player() {
         this.id = UUID.randomUUID().toString();
-        this.skillLevel = 5; // Nivel medio por defecto
+        this.skillLevel = 5.0; // Nivel medio por defecto
         this.position = "MED"; // Por defecto mediocampista
         this.totalDebt = 0;
         this.totalPaid = 0;

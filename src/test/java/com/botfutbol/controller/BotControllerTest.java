@@ -107,7 +107,7 @@ class BotControllerTest {
         // Arrange
         PlayerDTO playerDTO = new PlayerDTO();
         playerDTO.setName("Juan");
-        playerDTO.setSkillLevel(7);
+        playerDTO.setSkillLevel(7.0);
         
         Player savedPlayer = new Player();
         savedPlayer.setName("Juan");
