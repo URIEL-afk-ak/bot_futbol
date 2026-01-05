@@ -38,3 +38,7 @@ spring-boot-devtools.properties
 *.tmp
 *.swp
 *~
+
+# Ignorar credenciales de Firebase (NUNCA subir esto a Git)
+firebase-credentials.json
+*firebase-adminsdk*.json
