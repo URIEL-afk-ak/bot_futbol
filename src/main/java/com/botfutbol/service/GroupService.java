@@ -150,7 +150,9 @@ public class GroupService {
                 .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
         
         List<GroupMember> memberships = groupMemberRepository.findByUser(user);
+        // Filtrar solo grupos activos (no eliminados)
         return memberships.stream()
+                .filter(m -> m.getGroup().isActive())
                 .map(m -> convertToDTO(m.getGroup()))
                 .collect(Collectors.toList());
     }
