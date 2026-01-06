@@ -990,6 +990,7 @@ public class BotController {
             response.put("apellido", user.getApellido());
             response.put("email", user.getEmail());
             response.put("username", user.getUsername());
+            response.put("profileImageUrl", user.getProfileImageUrl() != null ? user.getProfileImageUrl() : "");
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
             Map<String, Object> response = new HashMap<>();
@@ -1007,17 +1008,32 @@ public class BotController {
     /**
      * Actualizar perfil del usuario
      */
-    @PutMapping("/user/profile")
-    public ResponseEntity<Map<String, Object>> updateProfile(@RequestBody UserDTO userDTO, HttpServletRequest request) {
+    @PutMapping(value = "/user/profile", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<Map<String, Object>> updateProfile(
+            @RequestParam(required = false) String nombre,
+            @RequestParam(required = false) String apellido,
+            @RequestParam(required = false) String email,
+            @RequestParam(required = false) String username,
+            @RequestParam(required = false) String password,
+            @RequestPart(required = false) org.springframework.web.multipart.MultipartFile profileImage,
+            HttpServletRequest request) {
         try {
             User user = getUserFromRequest(request);
+            
+            // Procesar imagen si existe
+            byte[] imageBytes = null;
+            if (profileImage != null && !profileImage.isEmpty()) {
+                imageBytes = profileImage.getBytes();
+            }
+            
             User updatedUser = userService.updateProfile(
                 user.getId(),
-                userDTO.getNombre(),
-                userDTO.getApellido(),
-                userDTO.getEmail(),
-                userDTO.getUsername(),
-                userDTO.getPassword()
+                nombre,
+                apellido,
+                email,
+                username,
+                password,
+                imageBytes
             );
             
             Map<String, Object> response = new HashMap<>();
@@ -1027,6 +1043,9 @@ public class BotController {
             response.put("apellido", updatedUser.getApellido());
             response.put("email", updatedUser.getEmail());
             response.put("username", updatedUser.getUsername());
+            if (updatedUser.getProfileImageUrl() != null) {
+                response.put("profileImageUrl", updatedUser.getProfileImageUrl());
+            }
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
             Map<String, Object> response = new HashMap<>();
@@ -1034,9 +1053,10 @@ public class BotController {
             response.put("message", e.getMessage());
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
         } catch (Exception e) {
+            logger.error("Error al actualizar perfil", e);
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "Error al actualizar perfil");
+            response.put("message", "Error al actualizar perfil: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
     }

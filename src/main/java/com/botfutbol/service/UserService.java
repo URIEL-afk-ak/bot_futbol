@@ -52,7 +52,7 @@ public class UserService {
         return passwordEncoder.matches(rawPassword, encodedPassword);
     }
 
-    public User updateProfile(Long userId, String nombre, String apellido, String email, String username, String password) {
+    public User updateProfile(Long userId, String nombre, String apellido, String email, String username, String password, byte[] profileImage) {
         logger.info("Actualizando perfil de usuario: {}", userId);
         User user = findById(userId);
         if (user == null) {
@@ -88,6 +88,19 @@ public class UserService {
         
         if (password != null && !password.trim().isEmpty()) {
             user.setPassword(passwordEncoder.encode(password));
+        }
+        
+        // Guardar imagen de perfil si se proporciona
+        if (profileImage != null && profileImage.length > 0) {
+            try {
+                // Convertir bytes a Base64 para almacenar en la base de datos
+                String base64Image = "data:image/jpeg;base64," + java.util.Base64.getEncoder().encodeToString(profileImage);
+                user.setProfileImageUrl(base64Image);
+                logger.info("Imagen de perfil actualizada para usuario: {}", userId);
+            } catch (Exception e) {
+                logger.error("Error al procesar imagen de perfil: {}", e.getMessage());
+                throw new IllegalArgumentException("Error al procesar la imagen");
+            }
         }
         
         return userRepository.save(user);

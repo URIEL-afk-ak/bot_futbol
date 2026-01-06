@@ -28,6 +28,9 @@ public class User {
     
     @Column(nullable = false, length = 255)
     private String password; // Guarda el hash, no el texto plano
+    
+    @Column(name = "profile_image_url", columnDefinition = "TEXT")
+    private String profileImageUrl; // URL o base64 de la imagen de perfil
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
@@ -46,4 +49,7 @@ public class User {
 
     public String getPassword() { return password; }
     public void setPassword(String password) { this.password = password; }
+    
+    public String getProfileImageUrl() { return profileImageUrl; }
+    public void setProfileImageUrl(String profileImageUrl) { this.profileImageUrl = profileImageUrl; }
 }

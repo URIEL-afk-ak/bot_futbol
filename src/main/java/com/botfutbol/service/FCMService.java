@@ -32,7 +32,9 @@ public class FCMService {
      */
     @Transactional
     public void registerToken(User user, String token, String deviceType, String deviceName) {
-        logger.info("Registrando token FCM para usuario {}", user.getId());
+        logger.info("📱 Registrando token FCM para usuario {} ({})", user.getId(), user.getNombre());
+        logger.debug("Token: {}... | Dispositivo: {} - {}", 
+            token.substring(0, Math.min(20, token.length())), deviceType, deviceName);
         
         // Verificar si el token ya existe para este usuario
         Optional<DeviceToken> existingToken = deviceTokenRepository.findByUserAndToken(user, token);
@@ -45,13 +47,13 @@ public class FCMService {
             dt.setDeviceType(deviceType);
             dt.setDeviceName(deviceName);
             deviceTokenRepository.save(dt);
-            logger.info("Token FCM actualizado para usuario {}", user.getId());
+            logger.info("✅ Token FCM actualizado para usuario {}", user.getId());
         } else {
             // Crear nuevo token
             DeviceToken newToken = new DeviceToken(user, token, deviceType);
             newToken.setDeviceName(deviceName);
             deviceTokenRepository.save(newToken);
-            logger.info("Nuevo token FCM registrado para usuario {}", user.getId());
+            logger.info("✅ Nuevo token FCM registrado para usuario {}", user.getId());
         }
     }
     
@@ -80,27 +82,35 @@ public class FCMService {
      * Envía una notificación push a un usuario con datos adicionales personalizados.
      */
     public void sendNotificationToUser(User user, String title, String body, String type, String groupId, String eventId, Map<String, String> additionalData) {
+        logger.info("📬 Intentando enviar notificación push a usuario {} ({})", user.getId(), user.getNombre());
+        logger.debug("Título: '{}' | Tipo: {}", title, type);
+        
         List<DeviceToken> tokens = deviceTokenRepository.findByUserAndIsActiveTrue(user);
         
         if (tokens.isEmpty()) {
-            logger.debug("No hay tokens FCM activos para usuario {}", user.getId());
+            logger.warn("⚠️ No hay tokens FCM activos para usuario {}. El usuario no recibirá notificaciones push.", user.getId());
             return;
         }
         
+        logger.info("📱 Enviando notificación a {} dispositivo(s)", tokens.size());
+        
         for (DeviceToken deviceToken : tokens) {
             try {
+                logger.debug("Enviando a token: {}...", deviceToken.getToken().substring(0, Math.min(20, deviceToken.getToken().length())));
                 sendPushNotification(deviceToken.getToken(), title, body, type, groupId, eventId, additionalData);
                 
                 // Actualizar lastUsedAt
                 deviceToken.setLastUsedAt(LocalDateTime.now());
                 deviceTokenRepository.save(deviceToken);
+                logger.info("✅ Notificación enviada correctamente a dispositivo {}", deviceToken.getDeviceName());
             } catch (Exception e) {
-                logger.warn("Error al enviar notificación push a token {}: {}", 
+                logger.error("❌ Error al enviar notificación push a token {}: {}", 
                     deviceToken.getId(), e.getMessage());
                 
                 // Si el token es inválido, desactivarlo
                 if (e.getMessage() != null && 
                     (e.getMessage().contains("invalid") || e.getMessage().contains("not-registered"))) {
+                    logger.warn("Token inválido, desactivando...");
                     deviceToken.setActive(false);
                     deviceTokenRepository.save(deviceToken);
                 }
