@@ -24,6 +24,9 @@ public interface GroupMemberRepository extends JpaRepository<GroupMember, String
     // Busca si un usuario es miembro de un grupo específico
     Optional<GroupMember> findByGroupAndUser(Group group, User user);
     
+    // Verifica si un usuario es miembro de un grupo
+    boolean existsByGroupAndUser(Group group, User user);
+    
     // Busca todos los miembros activos de un grupo
     List<GroupMember> findByGroupAndUser_IdIn(Group group, List<Long> userIds);
     

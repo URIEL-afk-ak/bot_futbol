@@ -55,6 +55,7 @@ public class BotController {
     private final com.botfutbol.service.GroupMessageService groupMessageService;
     private final com.botfutbol.service.GroupPollService groupPollService;
     private final com.botfutbol.service.FCMService fcmService;
+    private final com.botfutbol.service.GroupJoinRequestService groupJoinRequestService;
     
     public BotController(PlayerService playerService,
                          TeamService teamService,
@@ -68,7 +69,8 @@ public class BotController {
                          com.botfutbol.service.GroupPlayerRatingService groupPlayerRatingService,
                          com.botfutbol.service.GroupMessageService groupMessageService,
                          com.botfutbol.service.GroupPollService groupPollService,
-                         com.botfutbol.service.FCMService fcmService) {
+                         com.botfutbol.service.FCMService fcmService,
+                         com.botfutbol.service.GroupJoinRequestService groupJoinRequestService) {
         this.playerService = playerService;
         this.teamService = teamService;
         this.paymentService = paymentService;
@@ -82,6 +84,7 @@ public class BotController {
         this.groupMessageService = groupMessageService;
         this.groupPollService = groupPollService;
         this.fcmService = fcmService;
+        this.groupJoinRequestService = groupJoinRequestService;
     }
     
     // ==================== REST API ENDPOINTS ====================
@@ -2974,6 +2977,210 @@ public class BotController {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
             response.put("message", "Error al desactivar token: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+    
+    // ==================== BÚSQUEDA Y SOLICITUDES DE GRUPOS ====================
+    
+    /**
+     * Buscar grupos por nombre (públicos y privados)
+     */
+    @GetMapping("/groups/search")
+    public ResponseEntity<Map<String, Object>> searchGroups(@RequestParam String query,
+                                                            HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            List<GroupDTO> groups = groupService.searchGroups(query, user.getId());
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("groups", groups);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            logger.error("Error al buscar grupos: {}", e.getMessage(), e);
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Error al buscar grupos: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+    
+    /**
+     * Crear solicitud de ingreso a un grupo privado
+     */
+    @PostMapping("/groups/{groupId}/join-request")
+    public ResponseEntity<Map<String, Object>> createJoinRequest(@PathVariable String groupId,
+                                                                 @RequestBody(required = false) Map<String, String> requestBody,
+                                                                 HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            String message = requestBody != null ? requestBody.get("message") : null;
+            
+            com.botfutbol.dto.GroupJoinRequestDTO joinRequest = 
+                groupJoinRequestService.createJoinRequest(groupId, user.getId(), message);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Solicitud enviada exitosamente");
+            response.put("request", joinRequest);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        } catch (Exception e) {
+            logger.error("Error al crear solicitud: {}", e.getMessage(), e);
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Error al crear solicitud: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+    
+    /**
+     * Obtener solicitudes pendientes de un grupo (solo admins)
+     */
+    @GetMapping("/groups/{groupId}/join-requests/pending")
+    public ResponseEntity<Map<String, Object>> getPendingJoinRequests(@PathVariable String groupId,
+                                                                      HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            List<com.botfutbol.dto.GroupJoinRequestDTO> requests = 
+                groupJoinRequestService.getPendingRequests(groupId, user.getId());
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("requests", requests);
+            return ResponseEntity.ok(response);
+        } catch (IllegalStateException e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
+        } catch (Exception e) {
+            logger.error("Error al obtener solicitudes: {}", e.getMessage(), e);
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Error al obtener solicitudes: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+    
+    /**
+     * Aprobar solicitud de ingreso (solo admins)
+     */
+    @PostMapping("/groups/{groupId}/join-requests/{requestId}/approve")
+    public ResponseEntity<Map<String, Object>> approveJoinRequest(@PathVariable String groupId,
+                                                                  @PathVariable String requestId,
+                                                                  HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            com.botfutbol.dto.GroupJoinRequestDTO joinRequest = 
+                groupJoinRequestService.approveRequest(requestId, user.getId());
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Solicitud aprobada exitosamente");
+            response.put("request", joinRequest);
+            return ResponseEntity.ok(response);
+        } catch (IllegalStateException e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
+        } catch (Exception e) {
+            logger.error("Error al aprobar solicitud: {}", e.getMessage(), e);
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Error al aprobar solicitud: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+    
+    /**
+     * Rechazar solicitud de ingreso (solo admins)
+     */
+    @PostMapping("/groups/{groupId}/join-requests/{requestId}/reject")
+    public ResponseEntity<Map<String, Object>> rejectJoinRequest(@PathVariable String groupId,
+                                                                 @PathVariable String requestId,
+                                                                 @RequestBody(required = false) Map<String, String> requestBody,
+                                                                 HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            String reason = requestBody != null ? requestBody.get("reason") : null;
+            
+            com.botfutbol.dto.GroupJoinRequestDTO joinRequest = 
+                groupJoinRequestService.rejectRequest(requestId, user.getId(), reason);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Solicitud rechazada");
+            response.put("request", joinRequest);
+            return ResponseEntity.ok(response);
+        } catch (IllegalStateException e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
+        } catch (Exception e) {
+            logger.error("Error al rechazar solicitud: {}", e.getMessage(), e);
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Error al rechazar solicitud: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+    
+    /**
+     * Obtener historial de solicitudes del usuario
+     */
+    @GetMapping("/groups/my-join-requests")
+    public ResponseEntity<Map<String, Object>> getMyJoinRequests(HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            List<com.botfutbol.dto.GroupJoinRequestDTO> requests = 
+                groupJoinRequestService.getUserRequests(user.getId());
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("requests", requests);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            logger.error("Error al obtener historial de solicitudes: {}", e.getMessage(), e);
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Error al obtener solicitudes: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+    
+    /**
+     * Cancelar solicitud pendiente
+     */
+    @DeleteMapping("/groups/{groupId}/join-requests/{requestId}")
+    public ResponseEntity<Map<String, Object>> cancelJoinRequest(@PathVariable String groupId,
+                                                                 @PathVariable String requestId,
+                                                                 HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            groupJoinRequestService.cancelRequest(requestId, user.getId());
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Solicitud cancelada");
+            return ResponseEntity.ok(response);
+        } catch (IllegalStateException e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
+        } catch (Exception e) {
+            logger.error("Error al cancelar solicitud: {}", e.getMessage(), e);
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Error al cancelar solicitud: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
     }

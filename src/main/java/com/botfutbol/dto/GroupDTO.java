@@ -17,6 +17,9 @@ public class GroupDTO {
     private boolean isPrivate;
     private String type;
     private String photoUrl;
+    private boolean isMember; // Si el usuario actual es miembro
+    private boolean hasPendingRequest; // Si el usuario tiene una solicitud pendiente
+    private long pendingRequestCount; // Cantidad de solicitudes pendientes (solo para admins)
     
     public GroupDTO() {
     }
@@ -125,6 +128,30 @@ public class GroupDTO {
     
     public void setPhotoUrl(String photoUrl) {
         this.photoUrl = photoUrl;
+    }
+    
+    public boolean isMember() {
+        return isMember;
+    }
+    
+    public void setMember(boolean member) {
+        isMember = member;
+    }
+    
+    public boolean isHasPendingRequest() {
+        return hasPendingRequest;
+    }
+    
+    public void setHasPendingRequest(boolean hasPendingRequest) {
+        this.hasPendingRequest = hasPendingRequest;
+    }
+    
+    public long getPendingRequestCount() {
+        return pendingRequestCount;
+    }
+    
+    public void setPendingRequestCount(long pendingRequestCount) {
+        this.pendingRequestCount = pendingRequestCount;
     }
 }
 

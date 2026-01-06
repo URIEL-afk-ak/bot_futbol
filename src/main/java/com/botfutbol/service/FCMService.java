@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -72,6 +73,13 @@ public class FCMService {
      * Envía una notificación push a un usuario.
      */
     public void sendNotificationToUser(User user, String title, String body, String type, String groupId, String eventId) {
+        sendNotificationToUser(user, title, body, type, groupId, eventId, null);
+    }
+    
+    /**
+     * Envía una notificación push a un usuario con datos adicionales personalizados.
+     */
+    public void sendNotificationToUser(User user, String title, String body, String type, String groupId, String eventId, Map<String, String> additionalData) {
         List<DeviceToken> tokens = deviceTokenRepository.findByUserAndIsActiveTrue(user);
         
         if (tokens.isEmpty()) {
@@ -81,7 +89,7 @@ public class FCMService {
         
         for (DeviceToken deviceToken : tokens) {
             try {
-                sendPushNotification(deviceToken.getToken(), title, body, type, groupId, eventId);
+                sendPushNotification(deviceToken.getToken(), title, body, type, groupId, eventId, additionalData);
                 
                 // Actualizar lastUsedAt
                 deviceToken.setLastUsedAt(LocalDateTime.now());
@@ -113,6 +121,13 @@ public class FCMService {
      * Envía la notificación push mediante Firebase.
      */
     private void sendPushNotification(String token, String title, String body, String type, String groupId, String eventId) {
+        sendPushNotification(token, title, body, type, groupId, eventId, null);
+    }
+    
+    /**
+     * Envía la notificación push mediante Firebase con datos adicionales.
+     */
+    private void sendPushNotification(String token, String title, String body, String type, String groupId, String eventId, Map<String, String> additionalData) {
         try {
             // Construir el mensaje
             Message.Builder messageBuilder = Message.builder()
@@ -133,6 +148,11 @@ public class FCMService {
             }
             if (eventId != null) {
                 messageBuilder.putData("eventId", eventId);
+            }
+            if (additionalData != null) {
+                for (Map.Entry<String, String> entry : additionalData.entrySet()) {
+                    messageBuilder.putData(entry.getKey(), entry.getValue());
+                }
             }
             
             // Configuración específica para Android

@@ -32,11 +32,23 @@ public class AttendanceVote {
     @Column(nullable = false)
     private boolean attending; // true = sí asistirá, false = no asistirá
     
+    @Enumerated(EnumType.STRING)
+    @Column(name = "attendance_status", length = 20)
+    private AttendanceStatus attendanceStatus; // CONFIRMED, SUBSTITUTE, o null si no asiste
+    
+    @Column(name = "position")
+    private Integer position; // Orden de inscripción (para suplentes)
+    
     @Column(name = "voted_at", nullable = false)
     private LocalDateTime votedAt;
     
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+    
+    public enum AttendanceStatus {
+        CONFIRMED,   // Confirmado dentro del cupo
+        SUBSTITUTE   // En lista de suplentes
+    }
     
     public AttendanceVote() {
         this.id = UUID.randomUUID().toString();
@@ -101,6 +113,22 @@ public class AttendanceVote {
         this.updatedAt = updatedAt;
     }
     
+    public AttendanceStatus getAttendanceStatus() {
+        return attendanceStatus;
+    }
+    
+    public void setAttendanceStatus(AttendanceStatus attendanceStatus) {
+        this.attendanceStatus = attendanceStatus;
+    }
+    
+    public Integer getPosition() {
+        return position;
+    }
+    
+    public void setPosition(Integer position) {
+        this.position = position;
+    }
+    
     @Override
     public String toString() {
         return "AttendanceVote{" +
@@ -108,6 +136,8 @@ public class AttendanceVote {
                 ", event=" + (event != null ? event.getId() : null) +
                 ", user=" + (user != null ? user.getId() : null) +
                 ", attending=" + attending +
+                ", attendanceStatus=" + attendanceStatus +
+                ", position=" + position +
                 ", votedAt=" + votedAt +
                 '}';
     }

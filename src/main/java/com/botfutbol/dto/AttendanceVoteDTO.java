@@ -11,6 +11,8 @@ public class AttendanceVoteDTO {
     private Long userId;
     private String userName;
     private boolean attending;
+    private String attendanceStatus; // "CONFIRMED", "SUBSTITUTE", o null
+    private Integer position; // Orden de inscripción
     private LocalDateTime votedAt;
     private LocalDateTime updatedAt;
     
@@ -18,12 +20,15 @@ public class AttendanceVoteDTO {
     }
     
     public AttendanceVoteDTO(String id, String eventId, Long userId, String userName, 
-                             boolean attending, LocalDateTime votedAt, LocalDateTime updatedAt) {
+                             boolean attending, String attendanceStatus, Integer position,
+                             LocalDateTime votedAt, LocalDateTime updatedAt) {
         this.id = id;
         this.eventId = eventId;
         this.userId = userId;
         this.userName = userName;
         this.attending = attending;
+        this.attendanceStatus = attendanceStatus;
+        this.position = position;
         this.votedAt = votedAt;
         this.updatedAt = updatedAt;
     }
@@ -84,6 +89,22 @@ public class AttendanceVoteDTO {
     
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+    
+    public String getAttendanceStatus() {
+        return attendanceStatus;
+    }
+    
+    public void setAttendanceStatus(String attendanceStatus) {
+        this.attendanceStatus = attendanceStatus;
+    }
+    
+    public Integer getPosition() {
+        return position;
+    }
+    
+    public void setPosition(Integer position) {
+        this.position = position;
     }
 }
 

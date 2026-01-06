@@ -451,6 +451,37 @@ public class GroupService {
     }
     
     /**
+     * Busca grupos por nombre (públicos y privados).
+     * Incluye información adicional para el usuario actual.
+     */
+    @Transactional(readOnly = true)
+    public List<GroupDTO> searchGroups(String query, Long userId) {
+        logger.info("Buscando grupos con query: '{}' para usuario {}", query, userId);
+        
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
+        
+        // Buscar grupos activos que coincidan con el query
+        List<Group> groups = groupRepository.findAll().stream()
+                .filter(g -> g.isActive() && 
+                            (g.getName().toLowerCase().contains(query.toLowerCase()) ||
+                             (g.getDescription() != null && g.getDescription().toLowerCase().contains(query.toLowerCase()))))
+                .collect(Collectors.toList());
+        
+        // Convertir a DTO incluyendo información del usuario actual
+        return groups.stream()
+                .map(group -> {
+                    GroupDTO dto = convertToDTO(group);
+                    // Verificar si el usuario es miembro
+                    boolean isMember = groupMemberRepository.existsByGroupAndUser(group, user);
+                    dto.setMember(isMember);
+                    // Nota: hasPendingRequest se configurará desde el frontend usando otro endpoint
+                    return dto;
+                })
+                .collect(Collectors.toList());
+    }
+    
+    /**
      * Convierte una entidad GroupMember a DTO.
      */
     private GroupMemberDTO convertMemberToDTO(GroupMember member) {

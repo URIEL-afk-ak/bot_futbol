@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Servicio para manejar notificaciones de usuarios.
@@ -29,11 +30,13 @@ public class NotificationService {
     // Tipos de notificaciones
     public static final String TYPE_GROUP_INVITATION = "GROUP_INVITATION";
     public static final String TYPE_GROUP_JOINED = "GROUP_JOINED";
+    public static final String TYPE_GROUP_JOIN_REQUEST = "GROUP_JOIN_REQUEST";
     public static final String TYPE_GAME_REMINDER = "GAME_REMINDER";
     public static final String TYPE_GAME_UPDATE = "GAME_UPDATE";
     public static final String TYPE_GAME_STARTING_SOON = "GAME_STARTING_SOON";
     public static final String TYPE_EVENT_CREATED = "EVENT_CREATED";
     public static final String TYPE_ATTENDANCE_REMINDER = "ATTENDANCE_REMINDER";
+    public static final String TYPE_EVENT_ATTENDANCE = "EVENT_ATTENDANCE";
     public static final String TYPE_NEW_MESSAGE = "NEW_MESSAGE";
     
     /**
@@ -100,6 +103,22 @@ public class NotificationService {
         }
         
         return notification;
+    }
+    
+    /**
+     * Envía una notificación push con datos adicionales personalizados (sin guardar en BD).
+     * Útil para notificaciones interactivas con botones de acción.
+     */
+    public void sendPushNotificationWithData(User user, String title, String message, String type, 
+                                            String groupId, String eventId, Map<String, String> additionalData) {
+        if (fcmService != null) {
+            try {
+                fcmService.sendNotificationToUser(user, title, message, type, groupId, eventId, additionalData);
+                logger.debug("Notificación push con datos adicionales enviada a usuario {}", user.getId());
+            } catch (Exception e) {
+                logger.warn("Error al enviar notificación push con datos: {}", e.getMessage());
+            }
+        }
     }
     
     /**

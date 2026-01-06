@@ -5,6 +5,7 @@ import com.botfutbol.dto.GameEventDTO;
 import com.botfutbol.entity.AttendanceVote;
 import com.botfutbol.entity.GameEvent;
 import com.botfutbol.entity.Group;
+import com.botfutbol.entity.GroupMember;
 import com.botfutbol.entity.PlayerRating;
 import com.botfutbol.entity.User;
 import com.botfutbol.repository.AttendanceVoteRepository;
@@ -21,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -193,19 +195,178 @@ public class GameEventService {
         AttendanceVote vote = attendanceVoteRepository.findByEventAndUser(event, user)
                 .orElse(null);
         
+        boolean wasConfirmed = false;
         if (vote != null) {
+            // Guardar si estaba confirmado antes
+            wasConfirmed = vote.isAttending() && 
+                          vote.getAttendanceStatus() == AttendanceVote.AttendanceStatus.CONFIRMED;
+            
             // Actualizar votación existente
             vote.setAttending(attending);
+            
+            if (attending) {
+                // Si vota que sí, recalcular su estado (CONFIRMED o SUBSTITUTE)
+                recalculateAttendanceStatus(event, vote);
+            } else {
+                // Si vota que no, limpiar estado y posición
+                vote.setAttendanceStatus(null);
+                vote.setPosition(null);
+            }
+            
             vote = attendanceVoteRepository.save(vote);
             logger.info("Votación actualizada para usuario {} en evento {}", userId, eventId);
         } else {
             // Crear nueva votación
             vote = new AttendanceVote(event, user, attending);
+            
+            if (attending) {
+                // Asignar estado según capacidad disponible
+                recalculateAttendanceStatus(event, vote);
+            }
+            
             vote = attendanceVoteRepository.save(vote);
             logger.info("Nueva votación creada para usuario {} en evento {}", userId, eventId);
         }
         
+        // Si alguien confirmado se bajó, promover al primer suplente
+        if (wasConfirmed && !attending) {
+            promoteFirstSubstitute(event);
+        }
+        
+        // Notificar a los miembros del grupo sobre cambios en la asistencia
+        notifyAttendanceChange(event, user, vote, wasConfirmed);
+        
         return convertVoteToDTO(vote);
+    }
+    
+    /**
+     * Notifica a los miembros del grupo sobre cambios en la asistencia de un evento.
+     */
+    private void notifyAttendanceChange(GameEvent event, User user, AttendanceVote vote, boolean wasConfirmed) {
+        try {
+            String userName = user.getNombre() + " " + user.getApellido();
+            String eventDate = event.getDate().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm"));
+            
+            // Obtener todos los miembros del grupo
+            List<GroupMember> members = groupMemberRepository.findByGroup(event.getGroup());
+            
+            String title = null;
+            String message = null;
+            
+            if (vote.isAttending()) {
+                // Usuario se anotó
+                if (vote.getAttendanceStatus() == AttendanceVote.AttendanceStatus.CONFIRMED) {
+                    title = "Nuevo confirmado";
+                    message = userName + " confirmó asistencia al partido del " + eventDate;
+                } else if (vote.getAttendanceStatus() == AttendanceVote.AttendanceStatus.SUBSTITUTE) {
+                    title = "Nuevo suplente";
+                    message = userName + " se agregó como suplente al partido del " + eventDate;
+                }
+            } else if (wasConfirmed) {
+                // Usuario confirmado se bajó
+                title = "Jugador se bajó";
+                message = userName + " canceló su asistencia al partido del " + eventDate;
+            }
+            
+            // Enviar notificación a todos los miembros excepto al usuario que hizo el cambio
+            if (title != null && message != null) {
+                for (GroupMember member : members) {
+                    if (!member.getUser().getId().equals(user.getId())) {
+                        notificationService.createGameEventNotification(
+                            member.getUser(),
+                            title,
+                            message,
+                            NotificationService.TYPE_EVENT_ATTENDANCE,
+                            event.getId(),
+                            event.getGroup().getId()
+                        );
+                    }
+                }
+                logger.debug("Notificaciones de cambio de asistencia enviadas para evento {}", event.getId());
+            }
+        } catch (Exception e) {
+            logger.warn("Error al enviar notificaciones de cambio de asistencia: {}", e.getMessage());
+        }
+    }
+    
+    /**
+     * Recalcula el estado de asistencia (CONFIRMED o SUBSTITUTE) según la capacidad del evento.
+     */
+    private void recalculateAttendanceStatus(GameEvent event, AttendanceVote newVote) {
+        Integer maxPlayers = event.getMaxPlayers();
+        
+        // Si no hay límite de capacidad, todos son confirmados
+        if (maxPlayers == null || maxPlayers <= 0) {
+            newVote.setAttendanceStatus(AttendanceVote.AttendanceStatus.CONFIRMED);
+            newVote.setPosition(null);
+            return;
+        }
+        
+        // Contar cuántos confirmados hay (excluyendo el voto actual si ya existe)
+        List<AttendanceVote> attendingVotes = attendanceVoteRepository.findByEventAndAttendingTrue(event)
+                .stream()
+                .filter(v -> !v.getId().equals(newVote.getId()))
+                .sorted(Comparator.comparing(AttendanceVote::getVotedAt))
+                .collect(Collectors.toList());
+        
+        long confirmedCount = attendingVotes.stream()
+                .filter(v -> v.getAttendanceStatus() == AttendanceVote.AttendanceStatus.CONFIRMED)
+                .count();
+        
+        // Si hay cupo disponible, confirmar
+        if (confirmedCount < maxPlayers) {
+            newVote.setAttendanceStatus(AttendanceVote.AttendanceStatus.CONFIRMED);
+            newVote.setPosition(null);
+            logger.info("Usuario {} confirmado para evento {} ({}/{})", 
+                       newVote.getUser().getId(), event.getId(), confirmedCount + 1, maxPlayers);
+        } else {
+            // Si no hay cupo, agregar como suplente
+            long substituteCount = attendingVotes.stream()
+                    .filter(v -> v.getAttendanceStatus() == AttendanceVote.AttendanceStatus.SUBSTITUTE)
+                    .count();
+            newVote.setAttendanceStatus(AttendanceVote.AttendanceStatus.SUBSTITUTE);
+            newVote.setPosition((int)(substituteCount + 1));
+            logger.info("Usuario {} agregado como suplente #{} para evento {}", 
+                       newVote.getUser().getId(), substituteCount + 1, event.getId());
+        }
+    }
+    
+    /**
+     * Promueve al primer suplente cuando alguien confirmado se baja.
+     */
+    private void promoteFirstSubstitute(GameEvent event) {
+        // Buscar el primer suplente (por posición)
+        List<AttendanceVote> substitutes = attendanceVoteRepository.findByEventAndAttendingTrue(event)
+                .stream()
+                .filter(v -> v.getAttendanceStatus() == AttendanceVote.AttendanceStatus.SUBSTITUTE)
+                .sorted(Comparator.comparing(AttendanceVote::getPosition, Comparator.nullsLast(Comparator.naturalOrder())))
+                .collect(Collectors.toList());
+        
+        if (!substitutes.isEmpty()) {
+            AttendanceVote firstSubstitute = substitutes.get(0);
+            firstSubstitute.setAttendanceStatus(AttendanceVote.AttendanceStatus.CONFIRMED);
+            firstSubstitute.setPosition(null);
+            attendanceVoteRepository.save(firstSubstitute);
+            
+            logger.info("Suplente {} promovido a confirmado en evento {}", 
+                       firstSubstitute.getUser().getId(), event.getId());
+            
+            // Reordenar las posiciones de los suplentes restantes
+            for (int i = 1; i < substitutes.size(); i++) {
+                AttendanceVote sub = substitutes.get(i);
+                sub.setPosition(i);
+                attendanceVoteRepository.save(sub);
+            }
+            
+            // Notificar al usuario promovido
+            notificationService.createGroupNotification(
+                firstSubstitute.getUser(),
+                "¡Cupo disponible!",
+                "Se liberó un cupo en el evento. Ahora estás confirmado.",
+                NotificationService.TYPE_EVENT_ATTENDANCE,
+                event.getGroup().getId()
+            );
+        }
     }
     
     /**
@@ -710,6 +871,8 @@ public class GameEventService {
                 vote.getUser().getId(),
                 userName,
                 vote.isAttending(),
+                vote.getAttendanceStatus() != null ? vote.getAttendanceStatus().name() : null,
+                vote.getPosition(),
                 vote.getVotedAt(),
                 vote.getUpdatedAt()
         );
