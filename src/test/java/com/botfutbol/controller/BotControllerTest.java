@@ -53,6 +53,24 @@ class BotControllerTest {
     private UserService userService;
 
     @Mock
+    private com.botfutbol.service.NotificationService notificationService;
+
+    @Mock
+    private com.botfutbol.service.GroupPlayerRatingService groupPlayerRatingService;
+
+    @Mock
+    private com.botfutbol.service.GroupMessageService groupMessageService;
+
+    @Mock
+    private com.botfutbol.service.GroupPollService groupPollService;
+
+    @Mock
+    private com.botfutbol.service.FCMService fcmService;
+
+    @Mock
+    private com.botfutbol.service.GroupJoinRequestService groupJoinRequestService;
+
+    @Mock
     private HttpServletRequest request;
 
     @InjectMocks

@@ -8,15 +8,17 @@ public class UpdateGroupDTO {
     private String description;
     private String type; // "FUTBOL", "BASKET", "VOLEY", etc.
     private String photoUrl; // URL de la foto del grupo
+    private Boolean isPrivate; // Si el grupo es privado o público
     
     public UpdateGroupDTO() {
     }
     
-    public UpdateGroupDTO(String name, String description, String type, String photoUrl) {
+    public UpdateGroupDTO(String name, String description, String type, String photoUrl, Boolean isPrivate) {
         this.name = name;
         this.description = description;
         this.type = type;
         this.photoUrl = photoUrl;
+        this.isPrivate = isPrivate;
     }
     
     public String getName() {
@@ -49,6 +51,14 @@ public class UpdateGroupDTO {
     
     public void setPhotoUrl(String photoUrl) {
         this.photoUrl = photoUrl;
+    }
+    
+    public Boolean getIsPrivate() {
+        return isPrivate;
+    }
+    
+    public void setIsPrivate(Boolean isPrivate) {
+        this.isPrivate = isPrivate;
     }
 }
 

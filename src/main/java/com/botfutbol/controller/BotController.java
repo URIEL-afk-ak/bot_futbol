@@ -29,6 +29,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Controlador principal del bot.
@@ -1145,6 +1146,7 @@ public class BotController {
                 updateGroupDTO.getDescription(),
                 updateGroupDTO.getType(),
                 updateGroupDTO.getPhotoUrl(),
+                updateGroupDTO.getIsPrivate(),
                 user.getId()
             );
             
@@ -2085,6 +2087,12 @@ public class BotController {
             getUserFromRequest(request); // Autenticación
             List<com.botfutbol.entity.EventTeam> eventTeams = gameEventService.getEventTeams(eventId);
             
+            // Obtener lista de usuarios actualmente confirmados
+            List<AttendanceVoteDTO> confirmedVotes = gameEventService.getConfirmedAttendees(eventId);
+            Set<Long> confirmedUserIds = confirmedVotes.stream()
+                    .map(AttendanceVoteDTO::getUserId)
+                    .collect(java.util.stream.Collectors.toSet());
+            
             List<Map<String, Object>> teamsData = new ArrayList<>();
             for (com.botfutbol.entity.EventTeam eventTeam : eventTeams) {
                 Map<String, Object> teamData = new HashMap<>();
@@ -2093,12 +2101,16 @@ public class BotController {
                 teamData.put("teamName", eventTeam.getTeamName());
                 teamData.put("averageSkill", eventTeam.getAverageSkill());
                 
+                // Filtrar solo los jugadores que siguen confirmados
                 List<Map<String, Object>> playersData = new ArrayList<>();
                 for (User player : eventTeam.getPlayers()) {
-                    Map<String, Object> playerData = new HashMap<>();
-                    playerData.put("userId", player.getId());
-                    playerData.put("userName", player.getNombre() + " " + player.getApellido());
-                    playersData.add(playerData);
+                    // Solo incluir si el jugador está confirmado actualmente
+                    if (confirmedUserIds.contains(player.getId())) {
+                        Map<String, Object> playerData = new HashMap<>();
+                        playerData.put("userId", player.getId());
+                        playerData.put("userName", player.getNombre() + " " + player.getApellido());
+                        playersData.add(playerData);
+                    }
                 }
                 teamData.put("players", playersData);
                 teamsData.add(teamData);

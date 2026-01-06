@@ -437,7 +437,7 @@ public class GroupService {
     /**
      * Actualiza un grupo existente (solo administradores o el creador).
      */
-    public GroupDTO updateGroup(String groupId, String name, String description, String type, String photoUrl, Long userId) {
+    public GroupDTO updateGroup(String groupId, String name, String description, String type, String photoUrl, Boolean isPrivate, Long userId) {
         logger.info("Usuario {} actualizando grupo {}", userId, groupId);
         
         Group group = groupRepository.findById(groupId)
@@ -462,6 +462,11 @@ public class GroupService {
         
         if (photoUrl != null) {
             group.setPhotoUrl(photoUrl.trim().isEmpty() ? null : photoUrl.trim());
+        }
+        
+        if (isPrivate != null) {
+            group.setPrivate(isPrivate);
+            logger.info("Grupo {} cambiado a {}", groupId, isPrivate ? "privado" : "público");
         }
         
         group = groupRepository.save(group);
@@ -528,11 +533,14 @@ public class GroupService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
         
-        // Buscar grupos activos que coincidan con el query
+        // Normalizar el query para búsqueda sin acentos
+        String normalizedQuery = normalizeString(query.toLowerCase());
+        
+        // Buscar grupos activos que coincidan con el query (sin importar acentos)
         List<Group> groups = groupRepository.findAll().stream()
                 .filter(g -> g.isActive() && 
-                            (g.getName().toLowerCase().contains(query.toLowerCase()) ||
-                             (g.getDescription() != null && g.getDescription().toLowerCase().contains(query.toLowerCase()))))
+                            (normalizeString(g.getName().toLowerCase()).contains(normalizedQuery) ||
+                             (g.getDescription() != null && normalizeString(g.getDescription().toLowerCase()).contains(normalizedQuery))))
                 .collect(Collectors.toList());
         
         // Convertir a DTO incluyendo información del usuario actual
@@ -546,6 +554,18 @@ public class GroupService {
                     return dto;
                 })
                 .collect(Collectors.toList());
+    }
+    
+    /**
+     * Normaliza un string removiendo acentos para búsquedas.
+     */
+    private String normalizeString(String text) {
+        if (text == null) return "";
+        
+        // Normalizar a NFD (Canonical Decomposition) y remover marcas diacríticas
+        String normalized = java.text.Normalizer.normalize(text, java.text.Normalizer.Form.NFD);
+        // Remover caracteres de acento (categoría \p{M} = Marks)
+        return normalized.replaceAll("\\p{M}", "");
     }
     
     /**
