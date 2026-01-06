@@ -33,17 +33,20 @@ public class GroupService {
     private final UserRepository userRepository;
     private final GroupInvitationRepository groupInvitationRepository;
     private final NotificationService notificationService;
+    private final GroupMessageService groupMessageService;
     
     public GroupService(GroupRepository groupRepository, 
                        GroupMemberRepository groupMemberRepository,
                        UserRepository userRepository,
                        GroupInvitationRepository groupInvitationRepository,
-                       NotificationService notificationService) {
+                       NotificationService notificationService,
+                       GroupMessageService groupMessageService) {
         this.groupRepository = groupRepository;
         this.groupMemberRepository = groupMemberRepository;
         this.userRepository = userRepository;
         this.groupInvitationRepository = groupInvitationRepository;
         this.notificationService = notificationService;
+        this.groupMessageService = groupMessageService;
     }
     
     /**
@@ -95,6 +98,17 @@ public class GroupService {
         
         GroupMember member = new GroupMember(group, user, GroupMember.MemberRole.MEMBER);
         member = groupMemberRepository.save(member);
+        
+        // Crear mensaje del sistema en el chat
+        try {
+            String userName = getUserDisplayName(user);
+            groupMessageService.createSystemMessage(
+                groupId,
+                "👋 " + userName + " se unió al grupo"
+            );
+        } catch (Exception e) {
+            logger.warn("Error al crear mensaje del sistema: {}", e.getMessage());
+        }
         
         logger.info("Usuario {} se unió al grupo {}", userId, groupId);
         return convertMemberToDTO(member);
@@ -250,6 +264,17 @@ public class GroupService {
             groupId
         );
         
+        // Crear mensaje del sistema en el chat
+        try {
+            String userName = getUserDisplayName(invitedUser);
+            groupMessageService.createSystemMessage(
+                groupId,
+                "👋 " + userName + " se unió al grupo"
+            );
+        } catch (Exception e) {
+            logger.warn("Error al crear mensaje del sistema: {}", e.getMessage());
+        }
+        
         logger.info("Usuario {} invitado exitosamente al grupo {}", username, groupId);
         return convertMemberToDTO(member);
     }
@@ -306,6 +331,7 @@ public class GroupService {
     
     /**
      * Unirse a un grupo usando un código de invitación.
+     * Si el grupo es privado, genera un error indicando que debe solicitar acceso.
      */
     public GroupMemberDTO joinGroupByInvitationCode(String invitationCode, Long userId) {
         logger.info("Usuario {} uniéndose al grupo con código de invitación {}", userId, invitationCode);
@@ -323,6 +349,11 @@ public class GroupService {
             throw new IllegalStateException("El grupo no está activo");
         }
         
+        // Si el grupo es privado, no permitir unión directa
+        if (group.isPrivate()) {
+            throw new IllegalStateException("Este grupo es privado. Debes solicitar acceso y esperar a que un administrador apruebe tu solicitud.");
+        }
+        
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
         
@@ -331,7 +362,7 @@ public class GroupService {
             throw new IllegalStateException("El usuario ya es miembro del grupo");
         }
         
-        // Agregar como miembro
+        // Agregar como miembro (solo si es público)
         GroupMember member = new GroupMember(group, user, GroupMember.MemberRole.MEMBER);
         member = groupMemberRepository.save(member);
         
@@ -347,6 +378,17 @@ public class GroupService {
             NotificationService.TYPE_GROUP_JOINED,
             group.getId()
         );
+        
+        // Crear mensaje del sistema en el chat
+        try {
+            String userName = getUserDisplayName(user);
+            groupMessageService.createSystemMessage(
+                group.getId(),
+                "👋 " + userName + " se unió al grupo"
+            );
+        } catch (Exception e) {
+            logger.warn("Error al crear mensaje del sistema: {}", e.getMessage());
+        }
         
         logger.info("Usuario {} se unió al grupo {} usando código de invitación", userId, group.getId());
         return convertMemberToDTO(member);
@@ -365,6 +407,29 @@ public class GroupService {
                 .filter(GroupInvitation::isValid)
                 .findFirst()
                 .orElse(null);
+    }
+    
+    /**
+     * Obtiene información de un grupo por código de invitación sin unirse.
+     */
+    @Transactional(readOnly = true)
+    public GroupDTO getGroupByInvitationCode(String invitationCode) {
+        logger.info("Obteniendo información de grupo con código de invitación {}", invitationCode);
+        
+        GroupInvitation invitation = groupInvitationRepository.findByInvitationCode(invitationCode)
+                .orElseThrow(() -> new IllegalArgumentException("Código de invitación inválido"));
+        
+        if (!invitation.isValid()) {
+            throw new IllegalStateException("El código de invitación ha expirado o ya no es válido");
+        }
+        
+        Group group = invitation.getGroup();
+        
+        if (!group.isActive()) {
+            throw new IllegalStateException("El grupo no está activo");
+        }
+        
+        return convertToDTO(group);
     }
     
     /**
@@ -479,6 +544,20 @@ public class GroupService {
                     return dto;
                 })
                 .collect(Collectors.toList());
+    }
+    
+    /**
+     * Obtiene el nombre de usuario para mostrar.
+     */
+    private String getUserDisplayName(User user) {
+        String name = "";
+        if (user.getNombre() != null && !user.getNombre().isEmpty()) {
+            name = user.getNombre();
+        }
+        if (user.getApellido() != null && !user.getApellido().isEmpty()) {
+            name += (name.isEmpty() ? "" : " ") + user.getApellido();
+        }
+        return name.isEmpty() ? "Usuario " + user.getId() : name.trim();
     }
     
     /**

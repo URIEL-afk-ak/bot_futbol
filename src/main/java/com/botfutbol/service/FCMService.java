@@ -161,8 +161,12 @@ public class FCMService {
                     .setPriority(AndroidConfig.Priority.HIGH)
                     .setNotification(
                         AndroidNotification.builder()
+                            .setChannelId("group_requests_channel")
                             .setSound("default")
                             .setColor("#4CAF50")
+                            .setPriority(AndroidNotification.Priority.HIGH)
+                            .setDefaultSound(true)
+                            .setDefaultVibrateTimings(true)
                             .build()
                     )
                     .build()

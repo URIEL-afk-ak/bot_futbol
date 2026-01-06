@@ -1395,6 +1395,31 @@ public class BotController {
     }
     
     /**
+     * Obtener información de un grupo por código de invitación (sin unirse)
+     */
+    @GetMapping("/groups/by-code/{invitationCode}")
+    public ResponseEntity<Map<String, Object>> getGroupByInvitationCode(@PathVariable String invitationCode) {
+        try {
+            GroupDTO group = groupService.getGroupByInvitationCode(invitationCode.trim().toUpperCase());
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("group", group);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        } catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Error al obtener información del grupo: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+    
+    /**
      * Unirse a un grupo usando código de invitación
      */
     @PostMapping("/groups/join-by-code")
