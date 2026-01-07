@@ -86,6 +86,8 @@ public class GroupMessageService {
      */
     private void createMessageNotifications(Group group, User sender, String messageContent) {
         List<GroupMember> members = groupMemberRepository.findByGroup(group);
+        logger.info("🔔 Creando notificaciones para {} miembros del grupo {} (mensaje de {})", 
+            members.size(), group.getName(), sender.getId());
         
         String userName = (sender.getNombre() != null ? sender.getNombre() : "Usuario") + 
                          (sender.getApellido() != null ? " " + sender.getApellido() : "");
@@ -99,13 +101,17 @@ public class GroupMessageService {
             ? messageContent.substring(0, 97) + "..." 
             : messageContent;
         
+        int notificationsSent = 0;
         for (GroupMember member : members) {
             // No enviar notificación al mismo usuario que envió el mensaje
             if (member.getUser().getId().equals(sender.getId())) {
+                logger.debug("⏭️ Saltando notificación para el remitente ({})", sender.getId());
                 continue;
             }
             
             try {
+                logger.debug("📨 Enviando notificación a usuario {} ({})", 
+                    member.getUser().getId(), member.getUser().getNombre());
                 notificationService.createGroupNotification(
                     member.getUser(),
                     group.getName(),
@@ -113,14 +119,15 @@ public class GroupMessageService {
                     NotificationService.TYPE_NEW_MESSAGE,
                     group.getId()
                 );
+                notificationsSent++;
             } catch (Exception e) {
-                logger.warn("Error al crear notificación para usuario {}: {}", 
-                    member.getUser().getId(), e.getMessage());
+                logger.error("❌ Error al crear notificación para usuario {}: {}", 
+                    member.getUser().getId(), e.getMessage(), e);
             }
         }
         
-        logger.debug("Notificaciones creadas para {} miembros del grupo {}", 
-            members.size() - 1, group.getId());
+        logger.info("✅ Notificaciones creadas: {} de {} miembros (excl. remitente) del grupo {}", 
+            notificationsSent, members.size() - 1, group.getId());
     }
     
     /**
@@ -196,6 +203,7 @@ public class GroupMessageService {
             User user = message.getUser();
             String userName;
             Long userId;
+            String userPhotoUrl = null;
             
             if (user == null) {
                 logger.warn("Mensaje {} tiene usuario null", message.getId());
@@ -209,6 +217,8 @@ public class GroupMessageService {
                 if (userName.isEmpty()) {
                     userName = "Usuario " + userId;
                 }
+                // Obtener la URL de la foto de perfil del usuario
+                userPhotoUrl = user.getProfileImageUrl();
             }
             
             String groupId = message.getGroup() != null ? message.getGroup().getId() : null;
@@ -228,6 +238,7 @@ public class GroupMessageService {
                     groupId,
                     userId,
                     userName,
+                    userPhotoUrl,
                     messageText,
                     createdAt,
                     message.isSystemMessage(),

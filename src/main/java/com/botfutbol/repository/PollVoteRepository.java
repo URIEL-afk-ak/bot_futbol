@@ -12,6 +12,7 @@ import java.util.Optional;
 @Repository
 public interface PollVoteRepository extends JpaRepository<PollVote, String> {
     Optional<PollVote> findByPollAndUser(GroupPoll poll, User user);
+    List<PollVote> findAllByPollAndUser(GroupPoll poll, User user); // Para múltiples votos en una misma encuesta
     List<PollVote> findByPoll(GroupPoll poll);
     long countByPollAndSelectedOptionIndex(GroupPoll poll, Integer optionIndex);
 }

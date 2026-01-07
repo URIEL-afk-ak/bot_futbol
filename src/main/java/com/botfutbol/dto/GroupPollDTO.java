@@ -16,7 +16,8 @@ public class GroupPollDTO {
     private boolean isActive;
     private List<Integer> voteCounts; // Conteo de votos por opción
     private int totalVotes;
-    private Integer userVoteIndex; // Índice de la opción que votó el usuario actual (null si no votó)
+    private Integer userVoteIndex; // Índice de la opción que votó el usuario actual (null si no votó) - DEPRECATED, usar userVoteIndices
+    private List<Integer> userVoteIndices; // Índices de las opciones que votó el usuario actual (para multiple choice)
     
     public GroupPollDTO() {
     }
@@ -24,7 +25,8 @@ public class GroupPollDTO {
     public GroupPollDTO(String id, String groupId, Long createdByUserId, String createdByUserName,
                        String question, List<String> options, boolean isMultipleChoice,
                        LocalDateTime expiresAt, LocalDateTime createdAt, boolean isActive,
-                       List<Integer> voteCounts, int totalVotes, Integer userVoteIndex) {
+                       List<Integer> voteCounts, int totalVotes, Integer userVoteIndex,
+                       List<Integer> userVoteIndices) {
         this.id = id;
         this.groupId = groupId;
         this.createdByUserId = createdByUserId;
@@ -38,6 +40,7 @@ public class GroupPollDTO {
         this.voteCounts = voteCounts;
         this.totalVotes = totalVotes;
         this.userVoteIndex = userVoteIndex;
+        this.userVoteIndices = userVoteIndices;
     }
     
     // Getters y Setters
@@ -144,6 +147,14 @@ public class GroupPollDTO {
     
     public void setUserVoteIndex(Integer userVoteIndex) {
         this.userVoteIndex = userVoteIndex;
+    }
+    
+    public List<Integer> getUserVoteIndices() {
+        return userVoteIndices;
+    }
+    
+    public void setUserVoteIndices(List<Integer> userVoteIndices) {
+        this.userVoteIndices = userVoteIndices;
     }
 }
 

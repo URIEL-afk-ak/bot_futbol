@@ -121,25 +121,40 @@ public class GroupPollService {
             throw new IllegalStateException("Debes ser miembro del grupo para votar");
         }
         
-        // Verificar si ya votó
-        java.util.Optional<PollVote> existingVoteOpt = pollVoteRepository.findByPollAndUser(poll, user);
-        
-        if (existingVoteOpt.isPresent()) {
-            // Si ya votó y no es múltiple opción, actualizar el voto
-            if (!poll.isMultipleChoice()) {
+        if (poll.isMultipleChoice()) {
+            // Para múltiple choice, verificar si ya votó por esta opción específica
+            List<PollVote> existingVotes = pollVoteRepository.findAllByPollAndUser(poll, user);
+            boolean alreadyVotedForThisOption = existingVotes.stream()
+                    .anyMatch(v -> v.getSelectedOptionIndex().equals(optionIndex));
+            
+            if (alreadyVotedForThisOption) {
+                // Si ya votó por esta opción, eliminarla (toggle off)
+                PollVote voteToRemove = existingVotes.stream()
+                        .filter(v -> v.getSelectedOptionIndex().equals(optionIndex))
+                        .findFirst()
+                        .orElseThrow();
+                pollVoteRepository.delete(voteToRemove);
+                logger.info("Voto removido: usuario {} dejó de votar por opción {} en encuesta {}", 
+                           userId, optionIndex, pollId);
+            } else {
+                // Si no ha votado por esta opción, agregarla
+                PollVote newVote = new PollVote(poll, user, optionIndex);
+                pollVoteRepository.save(newVote);
+                logger.info("Voto agregado: usuario {} votó por opción {} en encuesta {}", 
+                           userId, optionIndex, pollId);
+            }
+        } else {
+            // Para single choice, reemplazar el voto anterior si existe
+            java.util.Optional<PollVote> existingVoteOpt = pollVoteRepository.findByPollAndUser(poll, user);
+            
+            if (existingVoteOpt.isPresent()) {
                 PollVote existingVote = existingVoteOpt.get();
                 existingVote.setSelectedOptionIndex(optionIndex);
                 pollVoteRepository.save(existingVote);
+            } else {
+                PollVote vote = new PollVote(poll, user, optionIndex);
+                pollVoteRepository.save(vote);
             }
-            // Si es múltiple opción, permitir múltiples votos (crear nuevo voto)
-            else {
-                PollVote newVote = new PollVote(poll, user, optionIndex);
-                pollVoteRepository.save(newVote);
-            }
-        } else {
-            // Crear nuevo voto
-            PollVote vote = new PollVote(poll, user, optionIndex);
-            pollVoteRepository.save(vote);
         }
         
         // Si la encuesta está vinculada a un evento, registrar asistencia automáticamente
@@ -232,11 +247,29 @@ public class GroupPollService {
         
         // Buscar el voto del usuario actual
         Integer userVoteIndex = null;
+        List<Integer> userVoteIndices = new java.util.ArrayList<>();
+        
         if (userId != null) {
-            java.util.Optional<PollVote> userVote = pollVoteRepository.findByPollAndUser(poll, 
-                userRepository.findById(userId).orElse(null));
-            if (userVote.isPresent()) {
-                userVoteIndex = userVote.get().getSelectedOptionIndex();
+            User currentUser = userRepository.findById(userId).orElse(null);
+            if (currentUser != null) {
+                if (poll.isMultipleChoice()) {
+                    // Para múltiple choice, buscar TODOS los votos del usuario
+                    List<PollVote> userVotes = pollVoteRepository.findAllByPollAndUser(poll, currentUser);
+                    userVoteIndices = userVotes.stream()
+                            .map(PollVote::getSelectedOptionIndex)
+                            .collect(Collectors.toList());
+                    // Para compatibilidad, también setear el primer voto
+                    if (!userVoteIndices.isEmpty()) {
+                        userVoteIndex = userVoteIndices.get(0);
+                    }
+                } else {
+                    // Para single choice, buscar solo el primer voto
+                    java.util.Optional<PollVote> userVote = pollVoteRepository.findByPollAndUser(poll, currentUser);
+                    if (userVote.isPresent()) {
+                        userVoteIndex = userVote.get().getSelectedOptionIndex();
+                        userVoteIndices.add(userVoteIndex);
+                    }
+                }
             }
         }
         
@@ -253,7 +286,8 @@ public class GroupPollService {
                 poll.isActive(),
                 voteCounts,
                 votes.size(),
-                userVoteIndex
+                userVoteIndex,
+                userVoteIndices
         );
     }
 }

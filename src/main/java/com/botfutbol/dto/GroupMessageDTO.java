@@ -10,6 +10,7 @@ public class GroupMessageDTO {
     private String groupId;
     private Long userId;
     private String userName;
+    private String userPhotoUrl; // URL de la foto de perfil del usuario
     private String message;
     private LocalDateTime createdAt;
     private boolean isSystemMessage;
@@ -25,14 +26,15 @@ public class GroupMessageDTO {
     }
     
     public GroupMessageDTO(String id, String groupId, Long userId, String userName, 
-                          String message, LocalDateTime createdAt, boolean isSystemMessage,
-                          boolean isPinned, LocalDateTime pinnedAt, LocalDateTime pinnedUntil,
-                          boolean isHighlighted, boolean isDeleted, 
+                          String userPhotoUrl, String message, LocalDateTime createdAt, 
+                          boolean isSystemMessage, boolean isPinned, LocalDateTime pinnedAt, 
+                          LocalDateTime pinnedUntil, boolean isHighlighted, boolean isDeleted, 
                           LocalDateTime editedAt, boolean isDeletedForMe) {
         this.id = id;
         this.groupId = groupId;
         this.userId = userId;
         this.userName = userName;
+        this.userPhotoUrl = userPhotoUrl;
         this.message = message;
         this.createdAt = createdAt;
         this.isSystemMessage = isSystemMessage;
@@ -77,6 +79,14 @@ public class GroupMessageDTO {
     
     public void setUserName(String userName) {
         this.userName = userName;
+    }
+    
+    public String getUserPhotoUrl() {
+        return userPhotoUrl;
+    }
+    
+    public void setUserPhotoUrl(String userPhotoUrl) {
+        this.userPhotoUrl = userPhotoUrl;
     }
     
     public String getMessage() {

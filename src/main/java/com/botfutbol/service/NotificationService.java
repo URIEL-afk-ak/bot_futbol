@@ -65,6 +65,9 @@ public class NotificationService {
      */
     @Transactional
     public Notification createGroupNotification(User user, String title, String message, String type, String groupId) {
+        logger.info("📬 Creando notificación de grupo para usuario {} ({}): '{}'", 
+            user.getId(), user.getNombre(), title);
+        
         Notification notification = createNotification(user, title, message, type);
         notification.setRelatedGroupId(groupId);
         notification.setActionUrl("/groups/" + groupId);
@@ -73,10 +76,13 @@ public class NotificationService {
         // Enviar notificación push con groupId
         if (fcmService != null) {
             try {
+                logger.debug("Enviando notificación push para grupo {} a usuario {}", groupId, user.getId());
                 fcmService.sendNotificationToUser(user, title, message, type, groupId, null);
             } catch (Exception e) {
-                logger.warn("Error al enviar notificación push: {}", e.getMessage());
+                logger.error("❌ Error al enviar notificación push: {}", e.getMessage(), e);
             }
+        } else {
+            logger.warn("⚠️ FCMService no disponible, no se enviará notificación push");
         }
         
         return notification;

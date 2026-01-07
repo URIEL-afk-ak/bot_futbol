@@ -587,6 +587,7 @@ public class GroupService {
      */
     private GroupMemberDTO convertMemberToDTO(GroupMember member) {
         String userName = member.getUser().getNombre() + " " + member.getUser().getApellido();
+        String profileImageUrl = member.getUser().getProfileImageUrl();
         
         return new GroupMemberDTO(
                 member.getId(),
@@ -595,9 +596,95 @@ public class GroupService {
                 member.getUser().getId(),
                 userName,
                 member.getUser().getEmail(),
+                profileImageUrl,
                 member.getRole().name(),
                 member.getJoinedAt()
         );
+    }
+    
+    /**
+     * Promueve un miembro a administrador.
+     */
+    @Transactional
+    public void promoteToAdmin(String groupId, Long memberUserId, Long requestingUserId) {
+        logger.info("Usuario {} promoviendo a usuario {} como admin en grupo {}", 
+                   requestingUserId, memberUserId, groupId);
+        
+        Group group = groupRepository.findById(groupId)
+                .orElseThrow(() -> new IllegalArgumentException("Grupo no encontrado"));
+        
+        User requestingUser = userRepository.findById(requestingUserId)
+                .orElseThrow(() -> new IllegalArgumentException("Usuario solicitante no encontrado"));
+        
+        User memberToPromote = userRepository.findById(memberUserId)
+                .orElseThrow(() -> new IllegalArgumentException("Usuario a promover no encontrado"));
+        
+        // Verificar que el usuario solicitante es admin del grupo
+        GroupMember requestingMember = groupMemberRepository.findByGroupAndUser(group, requestingUser)
+                .orElseThrow(() -> new IllegalStateException("El usuario solicitante no es miembro del grupo"));
+        
+        if (requestingMember.getRole() != GroupMember.MemberRole.ADMIN) {
+            throw new IllegalStateException("Solo los administradores pueden promover a otros usuarios");
+        }
+        
+        // Verificar que el usuario a promover es miembro del grupo
+        GroupMember memberToPromoteEntity = groupMemberRepository.findByGroupAndUser(group, memberToPromote)
+                .orElseThrow(() -> new IllegalStateException("El usuario a promover no es miembro del grupo"));
+        
+        if (memberToPromoteEntity.getRole() == GroupMember.MemberRole.ADMIN) {
+            throw new IllegalStateException("El usuario ya es administrador");
+        }
+        
+        // Promover a admin
+        memberToPromoteEntity.setRole(GroupMember.MemberRole.ADMIN);
+        groupMemberRepository.save(memberToPromoteEntity);
+        
+        logger.info("Usuario {} promovido a administrador en grupo {}", memberUserId, groupId);
+    }
+    
+    /**
+     * Degrada un administrador a miembro regular.
+     */
+    @Transactional
+    public void demoteFromAdmin(String groupId, Long memberUserId, Long requestingUserId) {
+        logger.info("Usuario {} degradando a usuario {} de admin en grupo {}", 
+                   requestingUserId, memberUserId, groupId);
+        
+        Group group = groupRepository.findById(groupId)
+                .orElseThrow(() -> new IllegalArgumentException("Grupo no encontrado"));
+        
+        User requestingUser = userRepository.findById(requestingUserId)
+                .orElseThrow(() -> new IllegalArgumentException("Usuario solicitante no encontrado"));
+        
+        User memberToDemote = userRepository.findById(memberUserId)
+                .orElseThrow(() -> new IllegalArgumentException("Usuario a degradar no encontrado"));
+        
+        // Verificar que el usuario solicitante es admin del grupo
+        GroupMember requestingMember = groupMemberRepository.findByGroupAndUser(group, requestingUser)
+                .orElseThrow(() -> new IllegalStateException("El usuario solicitante no es miembro del grupo"));
+        
+        if (requestingMember.getRole() != GroupMember.MemberRole.ADMIN) {
+            throw new IllegalStateException("Solo los administradores pueden degradar a otros usuarios");
+        }
+        
+        // No se puede degradar al creador del grupo
+        if (memberUserId.equals(group.getCreatedBy().getId())) {
+            throw new IllegalStateException("No se puede degradar al creador del grupo");
+        }
+        
+        // Verificar que el usuario a degradar es miembro del grupo
+        GroupMember memberToDemoteEntity = groupMemberRepository.findByGroupAndUser(group, memberToDemote)
+                .orElseThrow(() -> new IllegalStateException("El usuario a degradar no es miembro del grupo"));
+        
+        if (memberToDemoteEntity.getRole() != GroupMember.MemberRole.ADMIN) {
+            throw new IllegalStateException("El usuario no es administrador");
+        }
+        
+        // Degradar a miembro regular
+        memberToDemoteEntity.setRole(GroupMember.MemberRole.MEMBER);
+        groupMemberRepository.save(memberToDemoteEntity);
+        
+        logger.info("Usuario {} degradado de administrador en grupo {}", memberUserId, groupId);
     }
 }
 

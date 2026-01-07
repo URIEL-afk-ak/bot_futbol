@@ -12,6 +12,7 @@ public class GroupMemberDTO {
     private Long userId;
     private String userName;
     private String userEmail;
+    private String profileImageUrl; // URL de la foto de perfil del usuario
     private String role; // ADMIN o MEMBER
     private LocalDateTime joinedAt;
     
@@ -19,13 +20,15 @@ public class GroupMemberDTO {
     }
     
     public GroupMemberDTO(String id, String groupId, String groupName, Long userId, 
-                         String userName, String userEmail, String role, LocalDateTime joinedAt) {
+                         String userName, String userEmail, String profileImageUrl, 
+                         String role, LocalDateTime joinedAt) {
         this.id = id;
         this.groupId = groupId;
         this.groupName = groupName;
         this.userId = userId;
         this.userName = userName;
         this.userEmail = userEmail;
+        this.profileImageUrl = profileImageUrl;
         this.role = role;
         this.joinedAt = joinedAt;
     }
@@ -78,6 +81,14 @@ public class GroupMemberDTO {
     
     public void setUserEmail(String userEmail) {
         this.userEmail = userEmail;
+    }
+    
+    public String getProfileImageUrl() {
+        return profileImageUrl;
+    }
+    
+    public void setProfileImageUrl(String profileImageUrl) {
+        this.profileImageUrl = profileImageUrl;
     }
     
     public String getRole() {

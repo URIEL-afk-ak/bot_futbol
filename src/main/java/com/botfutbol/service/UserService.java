@@ -71,11 +71,16 @@ public class UserService {
         
         // Verificar si el username ya está en uso por otro usuario
         if (username != null && !username.equals(user.getUsername())) {
-            User existingUser = findByUsername(username);
+            // Validar que el username solo contenga caracteres permitidos
+            if (!username.trim().matches("^[a-zA-Z0-9_,;:*\\-@#$%&\\\\¡¿?'|°¬ ]+$")) {
+                throw new IllegalArgumentException("El nombre de usuario contiene caracteres no permitidos");
+            }
+            
+            User existingUser = findByUsername(username.trim());
             if (existingUser != null && !existingUser.getId().equals(userId)) {
                 throw new IllegalArgumentException("El nombre de usuario ya está en uso");
             }
-            user.setUsername(username.trim().toLowerCase());
+            user.setUsername(username.trim()); // Mantener mayúsculas/minúsculas originales
         }
         
         if (nombre != null && !nombre.trim().isEmpty()) {

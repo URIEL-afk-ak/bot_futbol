@@ -871,9 +871,14 @@ public class BotController {
     @PostMapping("/login")
     public ResponseEntity<Map<String, Object>> login(@Valid @RequestBody com.botfutbol.dto.LoginDTO loginData) {
         try {
-            String email = loginData.getEmail();
+            String identifier = loginData.getEmail(); // Puede ser email o username
             String password = loginData.getPassword();
-            User user = userService.findByEmail(email);
+            
+            // Intentar encontrar el usuario por email o username
+            User user = userService.findByEmail(identifier);
+            if (user == null) {
+                user = userService.findByUsername(identifier);
+            }
             
             if (user != null && userService.checkPassword(password, user.getPassword())) {
                 Map<String, Object> response = new HashMap<>();
@@ -925,7 +930,17 @@ public class BotController {
             // Verificar username solo si no hay error de base de datos
             try {
                 if (userDTO.getUsername() != null && !userDTO.getUsername().trim().isEmpty()) {
-                    String username = userDTO.getUsername().trim().toLowerCase();
+                    String username = userDTO.getUsername().trim();
+                    
+                    // Validar que el username solo contenga caracteres permitidos
+                    // Permitidos: letras, números, y caracteres especiales: _ , : ; * - @ # $ % & \ ¡ ¿ ? ' | ° ¬ y espacios
+                    if (!username.matches("^[a-zA-Z0-9_,;:*\\-@#$%&\\\\¡¿?'|°¬ ]+$")) {
+                        Map<String, Object> response = new HashMap<>();
+                        response.put("success", false);
+                        response.put("message", "El nombre de usuario contiene caracteres no permitidos");
+                        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+                    }
+                    
                     User existingUser = userService.findByUsername(username);
                     if (existingUser != null) {
                         Map<String, Object> response = new HashMap<>();
@@ -945,7 +960,7 @@ public class BotController {
             user.setEmail(userDTO.getEmail() != null ? userDTO.getEmail().trim().toLowerCase() : "");
             
             if (userDTO.getUsername() != null && !userDTO.getUsername().trim().isEmpty()) {
-                user.setUsername(userDTO.getUsername().trim().toLowerCase());
+                user.setUsername(userDTO.getUsername().trim()); // Mantener mayúsculas/minúsculas originales
             }
             
             user.setPassword(userDTO.getPassword()); // El servicio lo hasheará automáticamente
@@ -1160,6 +1175,7 @@ public class BotController {
                                                            HttpServletRequest request) {
         try {
             User user = getUserFromRequest(request);
+            logger.info("Actualizando grupo {} - isPrivate recibido: {}", groupId, updateGroupDTO.getIsPrivate());
             GroupDTO group = groupService.updateGroup(
                 groupId,
                 updateGroupDTO.getName(),
@@ -1359,6 +1375,62 @@ public class BotController {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
             response.put("message", "Error al eliminar miembro: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+    
+    /**
+     * Promover miembro a administrador (solo administradores)
+     */
+    @PostMapping("/groups/{groupId}/members/{memberUserId}/promote")
+    public ResponseEntity<Map<String, Object>> promoteToAdmin(@PathVariable String groupId,
+                                                             @PathVariable Long memberUserId,
+                                                             HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            groupService.promoteToAdmin(groupId, memberUserId, user.getId());
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Usuario promovido a administrador exitosamente");
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        } catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Error al promover usuario: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+    
+    /**
+     * Degradar administrador a miembro regular (solo administradores)
+     */
+    @PostMapping("/groups/{groupId}/members/{memberUserId}/demote")
+    public ResponseEntity<Map<String, Object>> demoteFromAdmin(@PathVariable String groupId,
+                                                              @PathVariable Long memberUserId,
+                                                              HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            groupService.demoteFromAdmin(groupId, memberUserId, user.getId());
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Usuario degradado de administrador exitosamente");
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        } catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Error al degradar usuario: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
     }
