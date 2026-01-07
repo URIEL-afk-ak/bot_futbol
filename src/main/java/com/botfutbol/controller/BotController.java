@@ -895,6 +895,8 @@ public class BotController {
                     // Si hay error al acceder a username (columna no existe), usar string vacío
                     response.put("username", "");
                 }
+                // Agregar foto de perfil
+                response.put("profileImageUrl", user.getProfileImageUrl() != null ? user.getProfileImageUrl() : "");
                 return ResponseEntity.ok(response);
             } else {
                 Map<String, Object> response = new HashMap<>();
