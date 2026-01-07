@@ -38,12 +38,12 @@ public class EventReminderService {
     
     /**
      * Verifica eventos que ocurren hoy y envía recordatorios.
-     * Se ejecuta cada hora.
+     * Se ejecuta solo a las 9:00 AM para evitar duplicados.
      */
-    @Scheduled(cron = "0 0 * * * ?") // Cada hora
+    @Scheduled(cron = "0 0 9 * * ?") // Solo a las 9:00 AM
     @Transactional
     public void sendDailyReminders() {
-        logger.info("Ejecutando verificación de recordatorios diarios");
+        logger.info("🔔 Ejecutando verificación de recordatorios diarios a las 9:00 AM");
         
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime startOfDay = now.withHour(0).withMinute(0).withSecond(0);
@@ -58,15 +58,17 @@ public class EventReminderService {
                 })
                 .collect(java.util.stream.Collectors.toList());
         
+        logger.info("📅 Encontrados {} eventos para hoy", eventsToday.size());
+        
         for (GameEvent event : eventsToday) {
             try {
                 sendEventReminder(event);
             } catch (Exception e) {
-                logger.error("Error al enviar recordatorio para evento {}: {}", event.getId(), e.getMessage());
+                logger.error("❌ Error al enviar recordatorio para evento {}: {}", event.getId(), e.getMessage());
             }
         }
         
-        logger.info("Verificación de recordatorios completada. Eventos procesados: {}", eventsToday.size());
+        logger.info("✅ Verificación de recordatorios completada. Eventos procesados: {}", eventsToday.size());
     }
     
     /**
