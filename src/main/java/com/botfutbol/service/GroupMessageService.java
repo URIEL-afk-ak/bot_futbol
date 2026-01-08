@@ -16,6 +16,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -107,8 +109,9 @@ public class GroupMessageService {
         // Guardar archivo
         Files.copy(audioFile.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
         
-        // Retornar URL relativa
-        String audioUrl = "/uploads/audio/" + filename;
+        // Construir URL completa del servidor
+        String baseUrl = ServletUriComponentsBuilder.fromCurrentContextPath().build().toUriString();
+        String audioUrl = baseUrl + "/uploads/audio/" + filename;
         logger.info("Audio guardado en: {}", audioUrl);
         
         return audioUrl;
