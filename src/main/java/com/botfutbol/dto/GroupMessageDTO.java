@@ -185,4 +185,4 @@ public class GroupMessageDTO {
     
     public void setAudioDuration(Integer audioDuration) {
         this.audioDuration = audioDuration;
-    }
+    }}
