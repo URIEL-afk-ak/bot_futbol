@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Únete a un grupo en Bot Fútbol">
+    
+    <title>Invitación a Grupo - Bot Fútbol</title>
+    
+    <!-- Open Graph para compartir en redes sociales -->
+    <meta property="og:title" content="Invitación a Grupo - Bot Fútbol">
+    <meta property="og:description" content="¡Te han invitado a unirte a un grupo! Descarga la app para aceptar.">
+    <meta property="og:image" content="https://botfutbol.app/icon.png">
+    <meta property="og:type" content="website">
+    
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Invitación a Grupo - Bot Fútbol">
+    <meta name="twitter:description" content="¡Te han invitado a unirte a un grupo!">
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            text-align: center;
+        }
+        
+        .icon {
+            font-size: 80px;
+            margin-bottom: 20px;
+        }
+        
+        h1 {
+            color: #333;
+            font-size: 28px;
+            margin-bottom: 15px;
+        }
+        
+        p {
+            color: #666;
+            font-size: 16px;
+            line-height: 1.6;
+            margin-bottom: 30px;
+        }
+        
+        .invitation-code {
+            background: #f5f5f5;
+            border-radius: 10px;
+            padding: 15px;
+            font-size: 24px;
+            font-weight: bold;
+            letter-spacing: 2px;
+            color: #667eea;
+            margin-bottom: 30px;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 16px 40px;
+            border-radius: 30px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin: 5px;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+        
+        .btn-secondary {
+            background: white;
+            color: #667eea;
+            border: 2px solid #667eea;
+            padding: 14px 40px;
+            border-radius: 30px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            transition: all 0.2s;
+            margin: 5px;
+        }
+        
+        .btn-secondary:hover {
+            background: #667eea;
+            color: white;
+        }
+        
+        .store-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 20px;
+        }
+        
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 10px;
+            font-size: 14px;
+            display: none;
+        }
+        
+        .status.info {
+            background: #e3f2fd;
+            color: #1976d2;
+            display: block;
+        }
+        
+        .status.success {
+            background: #e8f5e9;
+            color: #388e3c;
+        }
+        
+        @media (max-width: 600px) {
+            .container {
+                padding: 30px 20px;
+            }
+            
+            h1 {
+                font-size: 24px;
+            }
+            
+            .icon {
+                font-size: 60px;
+            }
+            
+            .store-buttons {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="icon">⚽</div>
+        <h1>¡Te han invitado a unirte!</h1>
+        <p>Has recibido una invitación para unirte a un grupo en Bot Fútbol</p>
+        
+        <div class="invitation-code" id="code">
+            {{INVITATION_CODE}}
+        </div>
+        
+        <div id="status" class="status info">
+            🔄 Intentando abrir la app...
+        </div>
+        
+        <a href="#" id="openApp" class="btn-primary">Abrir en la App</a>
+        
+        <div class="store-buttons">
+            <a href="https://play.google.com/store/apps/details?id=com.example.temp_bot_futbol" 
+               class="btn-secondary" 
+               target="_blank">
+                📱 Descargar para Android
+            </a>
+            <!-- Si tienes versión iOS, descomenta esto:
+            <a href="https://apps.apple.com/app/idXXXXXXXXX" 
+               class="btn-secondary" 
+               target="_blank">
+                🍎 Descargar para iOS
+            </a>
+            -->
+        </div>
+        
+        <p style="margin-top: 30px; font-size: 14px; color: #999;">
+            Si ya tienes la app instalada, el enlace se abrirá automáticamente
+        </p>
+    </div>
+    
+    <script>
+        // Obtener código de invitación
+        const invitationCode = document.getElementById('code').textContent.trim();
+        
+        // Construir deep links
+        const deepLink = `botfutbol://invite/${invitationCode}`;
+        const httpsLink = window.location.href;
+        
+        // Configurar botón
+        const openAppBtn = document.getElementById('openApp');
+        openAppBtn.href = deepLink;
+        
+        // Función para intentar abrir la app
+        function tryOpenApp() {
+            const statusDiv = document.getElementById('status');
+            
+            // Intento 1: Deep link directo
+            window.location.href = deepLink;
+            
+            // Después de 2 segundos, si no se abrió la app, mostrar mensaje
+            setTimeout(() => {
+                statusDiv.className = 'status info';
+                statusDiv.innerHTML = '📱 ¿No se abrió la app? Descárgala desde la tienda';
+                statusDiv.style.display = 'block';
+            }, 2000);
+        }
+        
+        // Intentar abrir automáticamente al cargar la página
+        // (solo en móviles para no molestar en desktop)
+        if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+            setTimeout(tryOpenApp, 500);
+        } else {
+            const statusDiv = document.getElementById('status');
+            statusDiv.className = 'status info';
+            statusDiv.innerHTML = '💻 Abre este enlace desde tu dispositivo móvil';
+            statusDiv.style.display = 'block';
+        }
+        
+        // Manejar clic en botón
+        openAppBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            tryOpenApp();
+        });
+    </script>
+</body>
+</html>

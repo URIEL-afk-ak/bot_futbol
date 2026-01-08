@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.example.temp_bot_futbol",
+      "sha256_cert_fingerprints": [
+        "AA:6C:49:B5:06:7B:65:AB:AD:06:0F:62:D0:59:B1:E5:4C:63:6E:10:D8:B9:94:86:2A:A0:95:82:DF:C4:AF:67"
+      ]
+    }
+  }
+]
