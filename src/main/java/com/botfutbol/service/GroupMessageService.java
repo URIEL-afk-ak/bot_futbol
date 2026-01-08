@@ -37,6 +37,9 @@ public class GroupMessageService {
     
     private static final Logger logger = LoggerFactory.getLogger(GroupMessageService.class);
     
+    @Value("${server.url:https://bot-futbol-augl.onrender.com}")
+    private String serverUrl;
+    
     private final GroupMessageRepository groupMessageRepository;
     private final GroupRepository groupRepository;
     private final UserRepository userRepository;
@@ -109,9 +112,8 @@ public class GroupMessageService {
         // Guardar archivo
         Files.copy(audioFile.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
         
-        // Construir URL completa del servidor
-        String baseUrl = ServletUriComponentsBuilder.fromCurrentContextPath().build().toUriString();
-        String audioUrl = baseUrl + "/uploads/audio/" + filename;
+        // Construir URL completa del servidor usando variable de entorno
+        String audioUrl = serverUrl + "/api/bot/uploads/audio/" + filename;
         logger.info("Audio guardado en: {}", audioUrl);
         
         return audioUrl;
