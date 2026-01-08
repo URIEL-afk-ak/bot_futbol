@@ -1,5 +1,7 @@
 package com.botfutbol.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 /**
  * DTO para actualizar un grupo existente.
  */
@@ -8,6 +10,8 @@ public class UpdateGroupDTO {
     private String description;
     private String type; // "FUTBOL", "BASKET", "VOLEY", etc.
     private String photoUrl; // URL de la foto del grupo
+    
+    @JsonProperty("isPrivate")
     private Boolean isPrivate; // Si el grupo es privado o público
     
     public UpdateGroupDTO() {

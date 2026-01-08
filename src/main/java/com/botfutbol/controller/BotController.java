@@ -2142,10 +2142,10 @@ public class BotController {
                 for (User player : eventTeam.getPlayers()) {
                     // Solo incluir si el jugador está confirmado actualmente
                     if (confirmedUserIds.contains(player.getId())) {
-                        Map<String, Object> playerData = new HashMap<>();
-                        playerData.put("userId", player.getId());
-                        playerData.put("userName", player.getNombre() + " " + player.getApellido());
-                        playersData.add(playerData);
+                    Map<String, Object> playerData = new HashMap<>();
+                    playerData.put("userId", player.getId());
+                    playerData.put("userName", player.getNombre() + " " + player.getApellido());
+                    playersData.add(playerData);
                     }
                 }
                 teamData.put("players", playersData);

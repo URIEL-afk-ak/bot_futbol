@@ -1,5 +1,6 @@
 package com.botfutbol.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.time.LocalDateTime;
 
 /**
@@ -14,7 +15,10 @@ public class GroupDTO {
     private String createdByName;
     private boolean isActive;
     private int memberCount;
+    
+    @JsonProperty("isPrivate")
     private boolean isPrivate;
+    
     private String type;
     private String photoUrl;
     private boolean isMember; // Si el usuario actual es miembro

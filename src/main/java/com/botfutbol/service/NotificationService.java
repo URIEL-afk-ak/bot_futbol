@@ -44,12 +44,20 @@ public class NotificationService {
      */
     @Transactional
     public Notification createNotification(User user, String title, String message, String type) {
+        return createNotification(user, title, message, type, true);
+    }
+    
+    /**
+     * Crea una notificación para un usuario con opción de enviar push.
+     */
+    @Transactional
+    public Notification createNotification(User user, String title, String message, String type, boolean sendPush) {
         logger.info("Creando notificación para usuario {}: {}", user.getId(), title);
         Notification notification = new Notification(user, title, message, type);
         notification = notificationRepository.save(notification);
         
-        // Enviar notificación push si FCMService está disponible
-        if (fcmService != null) {
+        // Enviar notificación push si FCMService está disponible y se solicitó
+        if (sendPush && fcmService != null) {
             try {
                 fcmService.sendNotificationToUser(user, title, message, type, null, null);
             } catch (Exception e) {
@@ -68,7 +76,8 @@ public class NotificationService {
         logger.info("📬 Creando notificación de grupo para usuario {} ({}): '{}'", 
             user.getId(), user.getNombre(), title);
         
-        Notification notification = createNotification(user, title, message, type);
+        // Crear notificación sin enviar push (se enviará después con el groupId)
+        Notification notification = createNotification(user, title, message, type, false);
         notification.setRelatedGroupId(groupId);
         notification.setActionUrl("/groups/" + groupId);
         notification = notificationRepository.save(notification);
@@ -93,7 +102,8 @@ public class NotificationService {
      */
     @Transactional
     public Notification createGameEventNotification(User user, String title, String message, String type, String eventId, String groupId) {
-        Notification notification = createNotification(user, title, message, type);
+        // Crear notificación sin enviar push (se enviará después con groupId y eventId)
+        Notification notification = createNotification(user, title, message, type, false);
         notification.setRelatedEventId(eventId);
         notification.setRelatedGroupId(groupId);
         notification.setActionUrl("/groups/" + groupId + "/events/" + eventId);
