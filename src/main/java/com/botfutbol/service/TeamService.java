@@ -176,27 +176,18 @@ public class TeamService {
     
     /**
      * Genera equipos aleatorios desde una lista de usuarios confirmados.
-     * Busca los jugadores asociados a cada usuario.
+     * Usa los datos del User (nombre, apellido) para los eventos de grupo.
+     * No busca en la tabla Player para mantener separadas las partes individual y grupal.
      */
     public List<Team> generateRandomTeamsFromUsers(List<User> confirmedUsers) {
-        // Obtener jugadores de todos los usuarios confirmados
+        // Crear jugadores temporales basados en los usuarios del grupo
         List<Player> allPlayers = new ArrayList<>();
         for (User user : confirmedUsers) {
-            List<Player> userPlayers = playerRepository.findByUser(user);
-            // Si el usuario tiene jugadores, agregar el primero (o todos)
-            if (!userPlayers.isEmpty()) {
-                // Usar el primer jugador activo o el primero disponible
-                Player player = userPlayers.stream()
-                        .filter(Player::isActivo)
-                        .findFirst()
-                        .orElse(userPlayers.get(0));
-                allPlayers.add(player);
-            } else {
-                // Si no tiene jugador, crear uno temporal con el nombre del usuario
-                Player tempPlayer = new Player(user.getNombre() + " " + user.getApellido());
-                tempPlayer.setUser(user);
-                allPlayers.add(tempPlayer);
-            }
+            // Siempre crear un jugador temporal con los datos del usuario
+            // para mantener separada la parte individual de la grupal
+            Player tempPlayer = new Player(user.getNombre() + " " + user.getApellido());
+            tempPlayer.setUser(user);
+            allPlayers.add(tempPlayer);
         }
         
         if (allPlayers.size() < 2) {
@@ -255,22 +246,15 @@ public class TeamService {
         // Ordenar por promedio de calificaciones (descendente)
         usersWithRatings.sort((e1, e2) -> Double.compare(e2.getValue(), e1.getValue()));
         
-        // Obtener jugadores de todos los usuarios confirmados
+        // Crear jugadores temporales basados en los usuarios del grupo
         List<Player> allPlayers = new ArrayList<>();
         for (Map.Entry<User, Double> entry : usersWithRatings) {
             User user = entry.getKey();
-            List<Player> userPlayers = playerRepository.findByUser(user);
-            if (!userPlayers.isEmpty()) {
-                Player player = userPlayers.stream()
-                        .filter(Player::isActivo)
-                        .findFirst()
-                        .orElse(userPlayers.get(0));
-                allPlayers.add(player);
-            } else {
-                Player tempPlayer = new Player(user.getNombre() + " " + user.getApellido());
-                tempPlayer.setUser(user);
-                allPlayers.add(tempPlayer);
-            }
+            // Siempre crear un jugador temporal con los datos del usuario
+            // para mantener separada la parte individual de la grupal
+            Player tempPlayer = new Player(user.getNombre() + " " + user.getApellido());
+            tempPlayer.setUser(user);
+            allPlayers.add(tempPlayer);
         }
         
         Team teamA = new Team("A", "Equipo A");
@@ -299,11 +283,13 @@ public class TeamService {
     /**
      * Genera equipos por posición desde una lista de usuarios confirmados.
      * Divide jugadores por posición (POR, DEF, MED, DEL) y distribuye equitativamente.
+     * NOTA: Este método es solo para la parte INDIVIDUAL (TeamsScreen).
+     * NO se usa para eventos de grupo.
      * Usa el promedio general de calificaciones (suma de todos los puntajes / total de calificaciones).
      * @param groupId Parámetro ignorado - siempre se usa el promedio general.
      */
     public List<Team> generateTeamsByPositionFromUsers(List<User> confirmedUsers, boolean balance, String groupId) {
-        // Obtener jugadores de todos los usuarios confirmados
+        // Buscar jugadores en la tabla Player para obtener sus posiciones
         List<Player> allPlayers = new ArrayList<>();
         Map<Player, Double> playerRatings = new HashMap<>();
         
@@ -316,13 +302,14 @@ public class TeamService {
                         .findFirst()
                         .orElse(userPlayers.get(0));
             } else {
+                // Si no tiene jugador, crear uno temporal sin posición
                 player = new Player(user.getNombre() + " " + user.getApellido());
                 player.setUser(user);
+                player.setPosition(null);
             }
             allPlayers.add(player);
             
-            // Siempre usar el promedio general (todas las calificaciones)
-            // El promedio general es la suma de TODOS los puntajes / total de calificaciones
+            // Usar el promedio general (suma de TODOS los puntajes / total de calificaciones)
             double rating = getPlayerRatingAverage(user);
             playerRatings.put(player, rating);
         }

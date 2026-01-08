@@ -2114,64 +2114,6 @@ public class BotController {
     }
     
     /**
-     * Formar equipos desde un evento de grupo (por posición)
-     */
-    @PostMapping("/events/{eventId}/teams/position")
-    public ResponseEntity<Map<String, Object>> formTeamsByPositionFromEvent(@PathVariable String eventId,
-                                                                            @RequestParam(defaultValue = "false") boolean balance,
-                                                                            HttpServletRequest request) {
-        try {
-            getUserFromRequest(request); // Autenticación
-            List<AttendanceVoteDTO> confirmed = gameEventService.getConfirmedAttendees(eventId);
-            
-            if (confirmed.size() < 2) {
-                Map<String, Object> response = new HashMap<>();
-                response.put("success", false);
-                response.put("message", "Se necesitan al menos 2 usuarios confirmados para formar equipos");
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
-            }
-            
-            // Obtener el grupo del evento para usar promedios del grupo
-            String groupId = null;
-            try {
-                com.botfutbol.entity.GameEvent event = gameEventService.getEventEntity(eventId);
-                if (event != null && event.getGroup() != null) {
-                    groupId = event.getGroup().getId();
-                }
-            } catch (Exception e) {
-                // Si no se puede obtener el grupo, usar promedio global
-            }
-            
-            List<User> confirmedUsers = confirmed.stream()
-                    .map(v -> userService.findById(v.getUserId()))
-                    .filter(u -> u != null)
-                    .collect(java.util.stream.Collectors.toList());
-            
-            List<Team> teams = teamService.generateTeamsByPositionFromUsers(confirmedUsers, balance, groupId);
-            List<TeamDTO> teamDTOs = teamService.convertToDTOs(teams);
-            
-            // Guardar equipos formados
-            gameEventService.saveEventTeams(eventId, teams, confirmedUsers);
-            
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("message", "Equipos formados por posición exitosamente");
-            response.put("teams", teamDTOs);
-            return ResponseEntity.ok(response);
-        } catch (IllegalArgumentException | IllegalStateException e) {
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", e.getMessage());
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
-        } catch (Exception e) {
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", "Error al formar equipos: " + e.getMessage());
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
-        }
-    }
-    
-    /**
      * Obtener equipos formados para un evento
      */
     @GetMapping("/events/{eventId}/teams")
