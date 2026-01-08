@@ -52,6 +52,12 @@ public class GroupMessage {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt; // Fecha de eliminación
     
+    @Column(name = "audio_url")
+    private String audioUrl; // URL del archivo de audio
+    
+    @Column(name = "audio_duration")
+    private Integer audioDuration; // Duración del audio en segundos
+    
     public GroupMessage() {
         this.id = UUID.randomUUID().toString();
         this.createdAt = LocalDateTime.now();
@@ -183,5 +189,20 @@ public class GroupMessage {
     public void setDeletedAt(LocalDateTime deletedAt) {
         this.deletedAt = deletedAt;
     }
+    
+    public String getAudioUrl() {
+        return audioUrl;
+    }
+    
+    public void setAudioUrl(String audioUrl) {
+        this.audioUrl = audioUrl;
+    }
+    
+    public Integer getAudioDuration() {
+        return audioDuration;
+    }
+    
+    public void setAudioDuration(Integer audioDuration) {
+        this.audioDuration = audioDuration;
+    }
 }
-

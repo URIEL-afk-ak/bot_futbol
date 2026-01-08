@@ -15,8 +15,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.List;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
@@ -76,6 +83,67 @@ public class GroupMessageService {
             createMessageNotifications(group, user, message);
         } catch (Exception e) {
             logger.warn("Error al crear notificaciones para mensaje en grupo {}: {}", groupId, e.getMessage());
+        }
+        
+        return convertToDTO(groupMessage, user);
+    }
+
+    /**
+     * Guarda un archivo de audio en el servidor.
+     */
+    public String saveAudioFile(String groupId, MultipartFile audioFile) throws IOException {
+        logger.info("Guardando archivo de audio para grupo {}", groupId);
+        
+        // Crear directorio si no existe
+        Path uploadDir = Paths.get("uploads/audio");
+        if (!Files.exists(uploadDir)) {
+            Files.createDirectories(uploadDir);
+        }
+        
+        // Generar nombre único para el archivo
+        String filename = groupId + "_" + UUID.randomUUID().toString() + ".m4a";
+        Path filePath = uploadDir.resolve(filename);
+        
+        // Guardar archivo
+        Files.copy(audioFile.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
+        
+        // Retornar URL relativa
+        String audioUrl = "/uploads/audio/" + filename;
+        logger.info("Audio guardado en: {}", audioUrl);
+        
+        return audioUrl;
+    }
+
+    /**
+     * Envía un mensaje de audio en un grupo.
+     */
+    public GroupMessageDTO sendAudioMessage(String groupId, Long userId, String audioUrl, int duration) {
+        logger.info("Usuario {} enviando audio en grupo {}", userId, groupId);
+        
+        Group group = groupRepository.findById(groupId)
+                .orElseThrow(() -> new IllegalArgumentException("Grupo no encontrado"));
+        
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
+        
+        // Verificar que el usuario es miembro del grupo
+        if (!groupMemberRepository.findByGroupAndUser(group, user).isPresent()) {
+            throw new IllegalStateException("Debes ser miembro del grupo para enviar mensajes");
+        }
+        
+        // Crear mensaje con metadata de audio
+        GroupMessage groupMessage = new GroupMessage(group, user, "🎤 Audio");
+        groupMessage.setAudioUrl(audioUrl);
+        groupMessage.setAudioDuration(duration);
+        groupMessage = groupMessageRepository.save(groupMessage);
+        
+        logger.info("Mensaje de audio enviado exitosamente con ID: {}", groupMessage.getId());
+        
+        // Crear notificaciones
+        try {
+            createMessageNotifications(group, user, "🎤 Audio");
+        } catch (Exception e) {
+            logger.warn("Error al crear notificaciones para audio en grupo {}: {}", groupId, e.getMessage());
         }
         
         return convertToDTO(groupMessage, user);
@@ -233,7 +301,7 @@ public class GroupMessageService {
                 isDeletedForMe = deletedMessageRepository.existsByMessageAndUser(message, currentUser);
             }
             
-            return new GroupMessageDTO(
+            GroupMessageDTO dto = new GroupMessageDTO(
                     message.getId() != null ? message.getId() : java.util.UUID.randomUUID().toString(),
                     groupId,
                     userId,
@@ -250,6 +318,14 @@ public class GroupMessageService {
                     message.getEditedAt(),
                     isDeletedForMe
             );
+            
+            // Agregar información de audio si existe
+            if (message.getAudioUrl() != null) {
+                dto.setAudioUrl(message.getAudioUrl());
+                dto.setAudioDuration(message.getAudioDuration());
+            }
+            
+            return dto;
         } catch (Exception e) {
             logger.error("Error al convertir mensaje {} a DTO", message.getId(), e);
             throw new RuntimeException("Error al convertir mensaje a DTO: " + e.getMessage(), e);

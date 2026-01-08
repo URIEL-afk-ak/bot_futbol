@@ -21,6 +21,8 @@ public class GroupMessageDTO {
     private boolean isDeleted;
     private LocalDateTime editedAt;
     private boolean isDeletedForMe; // Si el mensaje fue eliminado para el usuario actual
+    private String audioUrl; // URL del archivo de audio
+    private Integer audioDuration; // Duración del audio en segundos
     
     public GroupMessageDTO() {
     }
@@ -168,5 +170,19 @@ public class GroupMessageDTO {
     public void setDeletedForMe(boolean isDeletedForMe) {
         this.isDeletedForMe = isDeletedForMe;
     }
-}
-
+    
+    public String getAudioUrl() {
+        return audioUrl;
+    }
+    
+    public void setAudioUrl(String audioUrl) {
+        this.audioUrl = audioUrl;
+    }
+    
+    public Integer getAudioDuration() {
+        return audioDuration;
+    }
+    
+    public void setAudioDuration(Integer audioDuration) {
+        this.audioDuration = audioDuration;
+    }

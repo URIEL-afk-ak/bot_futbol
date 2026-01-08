@@ -18,6 +18,7 @@ import com.botfutbol.service.UserService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -2691,6 +2692,70 @@ public class BotController {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
             response.put("message", "Error al enviar mensaje: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+
+    /**
+     * Enviar mensaje de audio
+     */
+    @PostMapping("/groups/{groupId}/messages/audio")
+    public ResponseEntity<Map<String, Object>> sendAudioMessage(@PathVariable String groupId,
+                                                               @RequestParam("audio") MultipartFile audioFile,
+                                                               @RequestParam("duration") int duration,
+                                                               HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            
+            if (audioFile.isEmpty()) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", false);
+                response.put("message", "El archivo de audio no puede estar vacío");
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+            }
+
+            // Validar tipo de archivo
+            String contentType = audioFile.getContentType();
+            if (contentType == null || (!contentType.startsWith("audio/") && !contentType.equals("application/octet-stream"))) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", false);
+                response.put("message", "El archivo debe ser de tipo audio");
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+            }
+
+            // Validar tamaño (máximo 10MB)
+            if (audioFile.getSize() > 10 * 1024 * 1024) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", false);
+                response.put("message", "El archivo de audio no puede superar los 10MB");
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+            }
+
+            // Guardar audio y crear mensaje
+            String audioUrl = groupMessageService.saveAudioFile(groupId, audioFile);
+            com.botfutbol.dto.GroupMessageDTO message = groupMessageService.sendAudioMessage(
+                groupId, 
+                user.getId(), 
+                audioUrl, 
+                duration
+            );
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Audio enviado correctamente");
+            response.put("audioUrl", audioUrl);
+            response.put("messageData", message);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        } catch (Exception e) {
+            logger.error("Error al enviar audio en grupo {}", groupId, e);
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Error al enviar audio: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
     }
