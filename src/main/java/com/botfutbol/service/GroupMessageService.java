@@ -113,7 +113,7 @@ public class GroupMessageService {
         Files.copy(audioFile.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
         
         // Construir URL completa del servidor usando variable de entorno
-        String audioUrl = serverUrl + "/api/bot/uploads/audio/" + filename;
+        String audioUrl = serverUrl + "/uploads/audio/" + filename;
         logger.info("Audio guardado en: {}", audioUrl);
         
         return audioUrl;
