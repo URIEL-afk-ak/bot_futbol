@@ -247,9 +247,16 @@ public class GroupService {
         Group group = groupRepository.findById(groupId)
                 .orElseThrow(() -> new IllegalArgumentException("Grupo no encontrado"));
         
-        // Verificar que el que invita es miembro del grupo
-        if (!isUserMemberOfGroup(groupId, inviterUserId)) {
-            throw new IllegalStateException("Solo los miembros del grupo pueden invitar a otros");
+        // Si el grupo es privado, solo los administradores pueden invitar
+        if (group.isPrivate()) {
+            if (!isUserAdminOfGroup(groupId, inviterUserId)) {
+                throw new IllegalStateException("Solo los administradores pueden invitar usuarios a grupos privados");
+            }
+        } else {
+            // Si el grupo es público, cualquier miembro puede invitar
+            if (!isUserMemberOfGroup(groupId, inviterUserId)) {
+                throw new IllegalStateException("Solo los miembros del grupo pueden invitar a otros");
+            }
         }
         
         // Buscar usuario por username
@@ -336,6 +343,7 @@ public class GroupService {
     
     /**
      * Crea un enlace de invitación para un grupo.
+     * Para grupos privados, solo administradores pueden crear enlaces.
      */
     public GroupInvitation createInvitationLink(String groupId, Long userId, LocalDateTime expiresAt, Integer maxUses) {
         logger.info("Usuario {} creando enlace de invitación para grupo {}", userId, groupId);
@@ -343,9 +351,16 @@ public class GroupService {
         Group group = groupRepository.findById(groupId)
                 .orElseThrow(() -> new IllegalArgumentException("Grupo no encontrado"));
         
-        // Verificar que el usuario es miembro del grupo
-        if (!isUserMemberOfGroup(groupId, userId)) {
-            throw new IllegalStateException("Solo los miembros del grupo pueden crear enlaces de invitación");
+        // Para grupos privados, solo administradores pueden crear enlaces de invitación
+        if (group.isPrivate()) {
+            if (!isUserAdminOfGroup(groupId, userId)) {
+                throw new IllegalStateException("Solo los administradores pueden crear enlaces de invitación para grupos privados");
+            }
+        } else {
+            // Para grupos públicos, cualquier miembro puede crear enlaces
+            if (!isUserMemberOfGroup(groupId, userId)) {
+                throw new IllegalStateException("Solo los miembros del grupo pueden crear enlaces de invitación");
+            }
         }
         
         GroupInvitation invitation = new GroupInvitation(group, userId, expiresAt, maxUses);
@@ -375,10 +390,8 @@ public class GroupService {
             throw new IllegalStateException("El grupo no está activo");
         }
         
-        // Si el grupo es privado, no permitir unión directa
-        if (group.isPrivate()) {
-            throw new IllegalStateException("Este grupo es privado. Debes solicitar acceso y esperar a que un administrador apruebe tu solicitud.");
-        }
+        // Los enlaces de invitación permiten unirse incluso a grupos privados
+        // porque son creados por administradores como forma de invitación
         
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
