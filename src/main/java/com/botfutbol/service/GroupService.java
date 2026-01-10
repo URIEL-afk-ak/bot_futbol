@@ -136,6 +136,18 @@ public class GroupService {
         }
         
         groupMemberRepository.delete(member);
+        
+        // Crear mensaje del sistema en el chat
+        try {
+            String userName = getUserDisplayName(user);
+            groupMessageService.createSystemMessage(
+                groupId,
+                "👋 " + userName + " salió del grupo"
+            );
+        } catch (Exception e) {
+            logger.warn("Error al crear mensaje del sistema: {}", e.getMessage());
+        }
+        
         logger.info("Usuario {} abandonó el grupo {}", userId, groupId);
     }
     
@@ -307,6 +319,18 @@ public class GroupService {
         }
         
         groupMemberRepository.delete(member);
+        
+        // Crear mensaje del sistema en el chat
+        try {
+            String userName = getUserDisplayName(memberToRemove);
+            groupMessageService.createSystemMessage(
+                groupId,
+                "❌ " + userName + " fue eliminado del grupo"
+            );
+        } catch (Exception e) {
+            logger.warn("Error al crear mensaje del sistema: {}", e.getMessage());
+        }
+        
         logger.info("Miembro {} eliminado del grupo {}", memberUserId, groupId);
     }
     

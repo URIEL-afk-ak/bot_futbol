@@ -203,35 +203,66 @@
         
         // Construir deep links
         const deepLink = `botfutbol://invite/${invitationCode}`;
-        const httpsLink = window.location.href;
+        const appLink = window.location.href; // El App Link actual (HTTPS)
+        
+        // Detectar tipo de dispositivo
+        const isAndroid = /Android/i.test(navigator.userAgent);
+        const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+        const isMobile = isAndroid || isIOS;
         
         // Configurar botón
         const openAppBtn = document.getElementById('openApp');
-        openAppBtn.href = deepLink;
         
         // Función para intentar abrir la app
         function tryOpenApp() {
             const statusDiv = document.getElementById('status');
+            statusDiv.className = 'status info';
+            statusDiv.innerHTML = '🔄 Abriendo la app...';
+            statusDiv.style.display = 'block';
             
-            // Intento 1: Deep link directo
-            window.location.href = deepLink;
-            
-            // Después de 2 segundos, si no se abrió la app, mostrar mensaje
-            setTimeout(() => {
+            if (isAndroid) {
+                // En Android, usar intent: URL es más confiable
+                const intentUrl = `intent://invite/${invitationCode}#Intent;` +
+                                `scheme=botfutbol;` +
+                                `package=com.example.temp_bot_futbol;` +
+                                `S.browser_fallback_url=${encodeURIComponent(appLink)};` +
+                                `end`;
+                
+                window.location.href = intentUrl;
+                
+                // Fallback después de 1.5 segundos
+                setTimeout(() => {
+                    statusDiv.className = 'status info';
+                    statusDiv.innerHTML = '📱 ¿No se abrió la app? Descárgala desde Play Store';
+                    statusDiv.style.display = 'block';
+                }, 1500);
+                
+            } else if (isIOS) {
+                // En iOS, intentar Universal Link primero
+                window.location.href = deepLink;
+                
+                setTimeout(() => {
+                    statusDiv.className = 'status info';
+                    statusDiv.innerHTML = '📱 ¿No se abrió la app? Descárgala desde App Store';
+                    statusDiv.style.display = 'block';
+                }, 1500);
+                
+            } else {
+                // Desktop: solo mostrar mensaje
                 statusDiv.className = 'status info';
-                statusDiv.innerHTML = '📱 ¿No se abrió la app? Descárgala desde la tienda';
+                statusDiv.innerHTML = '💻 Abre este enlace desde tu dispositivo móvil';
                 statusDiv.style.display = 'block';
-            }, 2000);
+            }
         }
         
-        // Intentar abrir automáticamente al cargar la página
-        // (solo en móviles para no molestar en desktop)
-        if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+        // Intentar abrir automáticamente al cargar la página (solo en móviles)
+        if (isMobile) {
+            // Esperar un momento para que la página cargue completamente
             setTimeout(tryOpenApp, 500);
         } else {
             const statusDiv = document.getElementById('status');
             statusDiv.className = 'status info';
-            statusDiv.innerHTML = '💻 Abre este enlace desde tu dispositivo móvil';
+            statusDiv.innerHTML = '💻 Escanea el código QR o abre este enlace desde tu móvil';
             statusDiv.style.display = 'block';
         }
         
