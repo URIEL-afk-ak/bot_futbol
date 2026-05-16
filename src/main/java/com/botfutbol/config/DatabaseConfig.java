@@ -3,7 +3,6 @@ package com.botfutbol.config;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.jdbc.DataSourceProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
@@ -129,18 +128,14 @@ public class DatabaseConfig {
             }
         }
         
-        // Prioridad 3: application.properties (solo para desarrollo local)
+        // Sin configuración válida → error claro en lugar de NPE críptico
         if (jdbcUrl == null) {
-            logger.warn("⚠️ No se encontraron variables de entorno (DATABASE_URL o DB_*). Usando configuración de application.properties (localhost:3001)");
-            logger.warn("⚠️ Esto solo funciona en desarrollo local. Para producción, configura DATABASE_URL en Render.");
-            logger.warn("⚠️ DATABASE_URL está vacía o no configurada. Valor actual: '{}'", databaseUrl != null ? "no vacía" : "null");
-            logger.warn("⚠️ DB_HOST: '{}', DB_NAME: '{}', DB_USERNAME: '{}'", dbHost, dbName, dbUsername);
-            
-            // Usar valores por defecto de application.properties
-            DataSourceProperties defaultProperties = new DataSourceProperties();
-            jdbcUrl = defaultProperties.getUrl();
-            username = defaultProperties.getUsername();
-            password = defaultProperties.getPassword();
+            String msg = "❌ No se encontró configuración de base de datos para producción.\n" +
+                         "   Configura en el dashboard de Render la variable DATABASE_URL con el formato:\n" +
+                         "   postgresql://usuario:contraseña@host:puerto/base_de_datos\n" +
+                         "   (o las variables individuales DB_HOST, DB_PORT, DB_NAME, DB_USERNAME, DB_PASSWORD)";
+            logger.error(msg);
+            throw new IllegalStateException(msg);
         }
         
         logger.info("🔌 Creando DataSource para: {}@{}", username, jdbcUrl != null ? jdbcUrl.replaceAll("jdbc:postgresql://", "").split("/")[0] : "unknown");
