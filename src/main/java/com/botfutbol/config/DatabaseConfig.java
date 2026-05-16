@@ -3,10 +3,10 @@ package com.botfutbol.config;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
-import org.springframework.context.annotation.Profile;
 
 import javax.sql.DataSource;
 import com.zaxxer.hikari.HikariConfig;
@@ -15,10 +15,10 @@ import com.zaxxer.hikari.HikariDataSource;
 
 /**
  * Configuración de base de datos para Supabase/Render.
- * Parsea DATABASE_URL si está disponible, de lo contrario usa variables individuales.
+ * Se activa únicamente cuando DATABASE_URL está definida (producción).
+ * En desarrollo usa el datasource por defecto de application.properties.
  */
 @Configuration
-@Profile("production")
 public class DatabaseConfig {
     
     private static final Logger logger = LoggerFactory.getLogger(DatabaseConfig.class);
@@ -43,6 +43,7 @@ public class DatabaseConfig {
     
     @Bean
     @Primary
+    @ConditionalOnProperty(name = "DATABASE_URL")
     public DataSource dataSource() {
         String jdbcUrl;
         String username;
