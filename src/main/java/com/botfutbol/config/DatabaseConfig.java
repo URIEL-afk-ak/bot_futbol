@@ -7,6 +7,7 @@ import org.springframework.boot.autoconfigure.jdbc.DataSourceProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
+import org.springframework.context.annotation.Profile;
 
 import javax.sql.DataSource;
 import com.zaxxer.hikari.HikariConfig;
@@ -19,6 +20,7 @@ import java.net.URI;
  * Parsea DATABASE_URL si está disponible, de lo contrario usa variables individuales.
  */
 @Configuration
+@Profile("production")
 public class DatabaseConfig {
     
     private static final Logger logger = LoggerFactory.getLogger(DatabaseConfig.class);

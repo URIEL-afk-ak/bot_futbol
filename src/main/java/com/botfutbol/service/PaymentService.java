@@ -63,6 +63,7 @@ public class PaymentService {
                 paymentDTO.getAmount(),
                 paymentDTO.getConcept()
         );
+        payment.setMethod(paymentDTO.getMethod());
         payment.setUser(user);
         
         // Actualizar total pagado del jugador
@@ -136,6 +137,7 @@ public class PaymentService {
             double oldAmount = payment.getAmount();
             payment.setAmount(dto.getAmount());
             payment.setConcept(dto.getConcept());
+            if (dto.getMethod() != null) payment.setMethod(dto.getMethod());
 
             // Actualizar total pagado del jugador si cambió el monto
             Optional<Player> playerOpt = playerRepository.findByNameIgnoreCaseAndUser(payment.getPlayerName(), user);

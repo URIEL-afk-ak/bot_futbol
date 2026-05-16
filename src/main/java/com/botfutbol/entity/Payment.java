@@ -29,6 +29,9 @@ public class Payment {
     
     @Column(length = 200)
     private String concept; // Ej: "Pago partido 15/12", "Adelanto"
+
+    @Column(name = "payment_method", length = 50)
+    private String method; // "Efectivo", "Transferencia", "Mercado Pago"
     
     @ManyToOne
     @JoinColumn(name = "user_id")
@@ -96,11 +99,19 @@ public class Payment {
     public String getConcept() {
         return concept;
     }
-    
+
     public void setConcept(String concept) {
         this.concept = concept;
     }
-    
+
+    public String getMethod() {
+        return method;
+    }
+
+    public void setMethod(String method) {
+        this.method = method;
+    }
+
     public User getUser() {
         return user;
     }

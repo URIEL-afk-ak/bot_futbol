@@ -17,6 +17,9 @@ public class PaymentDTO {
     
     @Size(max = 500, message = "El concepto no puede exceder 500 caracteres")
     private String concept;
+
+    @Size(max = 50)
+    private String method; // "Efectivo", "Transferencia", "Mercado Pago"
     
     public PaymentDTO() {
     }
@@ -53,8 +56,16 @@ public class PaymentDTO {
     public String getConcept() {
         return concept;
     }
-    
+
     public void setConcept(String concept) {
         this.concept = concept;
+    }
+
+    public String getMethod() {
+        return method;
+    }
+
+    public void setMethod(String method) {
+        this.method = method;
     }
 }

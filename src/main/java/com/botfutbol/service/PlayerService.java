@@ -57,15 +57,25 @@ public class PlayerService {
         // Normalizar nombre: primera letra mayúscula, resto minúsculas
         String normalizedName = normalizePlayerName(playerDTO.getName());
         player.setName(normalizedName);
-        player.setSkillLevel(playerDTO.getSkillLevel() != null ? 
+        player.setSkillLevel(playerDTO.getSkillLevel() != null ?
                 playerDTO.getSkillLevel() : PlayerConstants.DEFAULT_SKILL_LEVEL);
-        player.setPosition(playerDTO.getPosition() != null ? 
+        player.setPosition(playerDTO.getPosition() != null ?
                 playerDTO.getPosition() : PlayerConstants.DEFAULT_POSITION);
         player.setTotalDebt(PlayerConstants.DEFAULT_TOTAL_DEBT);
         player.setTotalPaid(PlayerConstants.DEFAULT_TOTAL_PAID);
         player.setGamesPlayed(PlayerConstants.DEFAULT_GAMES_PLAYED);
         player.setGoalsScored(PlayerConstants.DEFAULT_GOALS_SCORED);
         player.setAttended(PlayerConstants.DEFAULT_ATTENDED);
+        player.setAttendanceStatus("NO_VA");
+        // Atributos extendidos opcionales
+        if (playerDTO.getEdadMin() != null) player.setEdadMin(playerDTO.getEdadMin());
+        if (playerDTO.getEdadMax() != null) player.setEdadMax(playerDTO.getEdadMax());
+        if (playerDTO.getNivelTecnico() != null) player.setNivelTecnico(playerDTO.getNivelTecnico());
+        if (playerDTO.getEstadoFisico() != null) player.setEstadoFisico(playerDTO.getEstadoFisico());
+        if (playerDTO.getIntensidad() != null) player.setIntensidad(playerDTO.getIntensidad());
+        if (playerDTO.getPiernaHabil() != null) player.setPiernaHabil(playerDTO.getPiernaHabil());
+        if (playerDTO.getNotas() != null) player.setNotas(playerDTO.getNotas());
+        if (playerDTO.getObservaciones() != null) player.setObservaciones(playerDTO.getObservaciones());
         player.setUser(user);
         
         try {
@@ -222,7 +232,7 @@ public class PlayerService {
     }
     
     /**
-     * Marca la asistencia de un jugador.
+     * Marca la asistencia de un jugador (boolean, retrocompat).
      */
     @CacheEvict(value = "players", allEntries = true)
     public void markAttendance(String playerName, boolean attended, User user) {
@@ -230,9 +240,26 @@ public class PlayerService {
         if (playerOpt.isEmpty()) {
             throw new IllegalArgumentException("Jugador no encontrado: " + playerName);
         }
-        
         Player player = playerOpt.get();
-        player.setAttended(attended);
+        String status = attended ? "CONFIRMADO" : "NO_VA";
+        player.setAttendanceStatus(status);
+        playerRepository.save(player);
+    }
+
+    /**
+     * Marca el estado de asistencia de un jugador: CONFIRMADO, NO_VA, DUDOSO.
+     */
+    @CacheEvict(value = "players", allEntries = true)
+    public void markAttendanceStatus(String playerName, String status, User user) {
+        if (!java.util.Set.of("CONFIRMADO", "NO_VA", "DUDOSO").contains(status)) {
+            throw new IllegalArgumentException("Estado inválido. Valores: CONFIRMADO, NO_VA, DUDOSO");
+        }
+        Optional<Player> playerOpt = playerRepository.findByNameIgnoreCaseAndUser(playerName, user);
+        if (playerOpt.isEmpty()) {
+            throw new IllegalArgumentException("Jugador no encontrado: " + playerName);
+        }
+        Player player = playerOpt.get();
+        player.setAttendanceStatus(status);
         playerRepository.save(player);
     }
     

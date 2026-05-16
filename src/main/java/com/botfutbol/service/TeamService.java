@@ -102,25 +102,25 @@ public class TeamService {
     }
     
     /**
-     * Genera dos equipos balanceados por nivel de habilidad.
+     * Genera dos equipos balanceados usando score compuesto:
+     * nivel técnico, estado físico, intensidad y edad física.
      */
     public List<Team> generateBalancedTeams(User user) {
-        // Filtrar solo jugadores que asistieron y pertenecen al usuario
         List<Player> allPlayers = playerRepository.findByUser(user).stream()
                 .filter(Player::isAttended)
                 .collect(Collectors.toList());
-        
+
         if (allPlayers.size() < 2) {
             throw new IllegalStateException("Se necesitan al menos 2 jugadores que asistieron para formar equipos");
         }
-        
-        // Ordenar jugadores por habilidad (descendente)
-        allPlayers.sort((p1, p2) -> Double.compare(p2.getSkillLevel(), p1.getSkillLevel()));
-        
+
+        // Ordenar por score compuesto descendente
+        allPlayers.sort((p1, p2) -> Double.compare(p2.getBalanceScore(), p1.getBalanceScore()));
+
         Team teamA = new Team("A", "Equipo A");
         Team teamB = new Team("B", "Equipo B");
-        
-        // Asignar jugadores alternando para equilibrar
+
+        // Distribución serpentina para mayor equilibrio
         for (int i = 0; i < allPlayers.size(); i++) {
             if (i % 2 == 0) {
                 teamA.addPlayer(allPlayers.get(i));
@@ -128,7 +128,7 @@ public class TeamService {
                 teamB.addPlayer(allPlayers.get(i));
             }
         }
-        
+
         return Arrays.asList(teamA, teamB);
     }
     
@@ -140,11 +140,17 @@ public class TeamService {
                 .map(this::convertPlayerToDTO)
                 .collect(Collectors.toList());
         
+        int avgBalance = (int) Math.round(
+                team.getPlayers().stream()
+                        .mapToDouble(Player::getBalanceScore)
+                        .average()
+                        .orElse(0)
+        );
         TeamDTO dto = new TeamDTO(
                 team.getId(),
                 team.getName(),
                 playerDTOs,
-                team.getTotalSkillLevel()
+                avgBalance
         );
         dto.setGoals(team.getGoals());
         return dto;
@@ -154,7 +160,7 @@ public class TeamService {
      * Convierte un Player a PlayerResponseDTO.
      */
     private PlayerResponseDTO convertPlayerToDTO(Player player) {
-        return new PlayerResponseDTO(
+        PlayerResponseDTO dto = new PlayerResponseDTO(
                 player.getName(),
                 player.getSkillLevel(),
                 player.getGoalsScored(),
@@ -163,6 +169,19 @@ public class TeamService {
                 (long) player.getTotalDebt(),
                 player.isAttended()
         );
+        dto.setPosition(player.getPosition());
+        dto.setEdadMin(player.getEdadMin());
+        dto.setEdadMax(player.getEdadMax());
+        dto.setNivelTecnico(player.getNivelTecnico());
+        dto.setEstadoFisico(player.getEstadoFisico());
+        dto.setIntensidad(player.getIntensidad());
+        dto.setPiernaHabil(player.getPiernaHabil());
+        dto.setNotas(player.getNotas());
+        dto.setObservaciones(player.getObservaciones());
+        dto.setAttendanceStatus(player.getAttendanceStatus());
+        dto.setEdadFisica(player.getEdadFisica());
+        dto.setBalanceScore(player.getBalanceScore());
+        return dto;
     }
     
     /**

@@ -42,9 +42,9 @@ public interface PlayerRepository extends JpaRepository<Player, String> {
     // Obtiene todos los jugadores activos por usuario
     List<Player> findAllByActivoTrueAndUser(com.botfutbol.entity.User user);
 
-    // Optimizado: Desmarca asistencia de todos los jugadores de un usuario (actualización masiva)
+    // Desmarca asistencia de todos los jugadores de un usuario (actualización masiva)
     @Modifying
-    @Query("UPDATE Player p SET p.attended = false WHERE p.user = :user AND p.attended = true")
+    @Query("UPDATE Player p SET p.attended = false, p.attendanceStatus = 'NO_VA' WHERE p.user = :user")
     int unmarkAllAttendanceByUser(@Param("user") com.botfutbol.entity.User user);
 
     // Métodos originales (si necesitas compatibilidad)

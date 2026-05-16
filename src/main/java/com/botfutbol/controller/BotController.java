@@ -156,7 +156,14 @@ public class BotController {
             player.setName(dto.getName());
             player.setSkillLevel(dto.getSkillLevel() != null ? dto.getSkillLevel() : player.getSkillLevel());
             player.setPosition(dto.getPosition() != null ? dto.getPosition() : player.getPosition());
-            // NO toques player.setAttended(...) aquí, así se mantiene igual
+            if (dto.getEdadMin() != null) player.setEdadMin(dto.getEdadMin());
+            if (dto.getEdadMax() != null) player.setEdadMax(dto.getEdadMax());
+            if (dto.getNivelTecnico() != null) player.setNivelTecnico(dto.getNivelTecnico());
+            if (dto.getEstadoFisico() != null) player.setEstadoFisico(dto.getEstadoFisico());
+            if (dto.getIntensidad() != null) player.setIntensidad(dto.getIntensidad());
+            if (dto.getPiernaHabil() != null) player.setPiernaHabil(dto.getPiernaHabil());
+            if (dto.getNotas() != null) player.setNotas(dto.getNotas());
+            if (dto.getObservaciones() != null) player.setObservaciones(dto.getObservaciones());
             playerService.updatePlayer(player);
             return ResponseEntity.ok(String.format("Jugador actualizado: %s", player.getName()));
         } catch (IllegalArgumentException e) {
@@ -197,17 +204,32 @@ public class BotController {
     }
     
     /**
-     * Marcar asistencia de un jugador
+     * Marcar asistencia de un jugador (boolean, retrocompat)
      */
     @PutMapping("/player/attendance/{name}")
     public ResponseEntity<String> markAttendance(@PathVariable String name, @RequestParam boolean attended, HttpServletRequest request) {
         try {
             User user = getUserFromRequest(request);
-            // Usar el método markAttendance del servicio que invalida el caché correctamente
             playerService.markAttendance(name, attended, user);
             return ResponseEntity.ok(String.format("Asistencia actualizada: %s", name));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(e.getMessage());
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Error: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Marcar estado de asistencia: CONFIRMADO, NO_VA, DUDOSO
+     */
+    @PutMapping("/player/attendance-status/{name}")
+    public ResponseEntity<String> markAttendanceStatus(@PathVariable String name, @RequestParam String status, HttpServletRequest request) {
+        try {
+            User user = getUserFromRequest(request);
+            playerService.markAttendanceStatus(name, status, user);
+            return ResponseEntity.ok(String.format("Estado de asistencia actualizado: %s → %s", name, status));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
         } catch (Exception e) {
             return ResponseEntity.badRequest().body("Error: " + e.getMessage());
         }
