@@ -171,6 +171,7 @@ public class DatabaseConfig {
         config.setConnectionTimeout(30000);
         config.setIdleTimeout(600000);
         config.setMaxLifetime(1800000);
+        config.setInitializationFailTimeout(60000);
 
         try {
             HikariDataSource ds = new HikariDataSource(config);
