@@ -12,7 +12,6 @@ import javax.sql.DataSource;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 
-import java.net.URI;
 
 /**
  * Configuración de base de datos para Supabase/Render.
@@ -60,27 +59,48 @@ public class DatabaseConfig {
                 if (!urlToParse.startsWith("postgresql://") && !urlToParse.startsWith("postgres://")) {
                     urlToParse = "postgresql://" + urlToParse;
                 }
-                
-                URI dbUri = new URI(urlToParse.replace("postgresql://", "http://").replace("postgres://", "http://"));
-                
-                String userInfo = dbUri.getUserInfo();
-                if (userInfo == null || !userInfo.contains(":")) {
+
+                // Remover esquema
+                String withoutScheme = urlToParse
+                    .replaceFirst("^postgresql://", "")
+                    .replaceFirst("^postgres://", "");
+
+                // Separar credenciales del host usando lastIndexOf('@')
+                int atIndex = withoutScheme.lastIndexOf('@');
+                if (atIndex == -1) {
                     throw new IllegalArgumentException("DATABASE_URL debe incluir usuario y contraseña: user:password@host");
                 }
-                
-                username = userInfo.split(":")[0];
-                password = userInfo.split(":")[1];
-                String host = dbUri.getHost();
-                int port = dbUri.getPort() == -1 ? 5432 : dbUri.getPort();
-                String database = dbUri.getPath().replaceFirst("/", "");
-                
-                if (database.isEmpty()) {
-                    database = "postgres";
+                String userInfo = withoutScheme.substring(0, atIndex);
+                String hostPart = withoutScheme.substring(atIndex + 1);
+
+                // Separar usuario de contraseña usando indexOf(':') (primer ':')
+                int colonInUser = userInfo.indexOf(':');
+                if (colonInUser == -1) {
+                    throw new IllegalArgumentException("DATABASE_URL debe incluir contraseña: user:password@host");
                 }
-                
-                // Construir JDBC URL con parámetros SSL para Supabase
-                // Usar 'prefer' para mayor compatibilidad (intenta SSL pero permite sin SSL)
-                jdbcUrl = String.format("jdbc:postgresql://%s:%d/%s?sslmode=prefer&connectTimeout=10", host, port, database);
+                username = userInfo.substring(0, colonInUser);
+                password = userInfo.substring(colonInUser + 1);
+
+                // Separar host:port/database
+                int slashIndex = hostPart.indexOf('/');
+                String hostAndPort = slashIndex == -1 ? hostPart : hostPart.substring(0, slashIndex);
+                String database = slashIndex == -1 ? "postgres" : hostPart.substring(slashIndex + 1);
+                if (database.isEmpty()) database = "postgres";
+
+                // Separar host de port
+                int portColon = hostAndPort.lastIndexOf(':');
+                String host;
+                int port;
+                if (portColon == -1) {
+                    host = hostAndPort;
+                    port = 5432;
+                } else {
+                    host = hostAndPort.substring(0, portColon);
+                    port = Integer.parseInt(hostAndPort.substring(portColon + 1));
+                }
+
+                // Construir JDBC URL con SSL requerido para Supabase
+                jdbcUrl = String.format("jdbc:postgresql://%s:%d/%s?sslmode=require&connectTimeout=10", host, port, database);
                 
                 logger.info("✅ Configuración de base de datos desde DATABASE_URL:");
                 logger.info("   Usuario: {}", username);
@@ -139,7 +159,7 @@ public class DatabaseConfig {
         }
         
         logger.info("🔌 Creando DataSource para: {}@{}", username, jdbcUrl != null ? jdbcUrl.replaceAll("jdbc:postgresql://", "").split("/")[0] : "unknown");
-        
+
         HikariConfig config = new HikariConfig();
         config.setJdbcUrl(jdbcUrl);
         config.setUsername(username);
@@ -151,8 +171,17 @@ public class DatabaseConfig {
         config.setConnectionTimeout(30000);
         config.setIdleTimeout(600000);
         config.setMaxLifetime(1800000);
-        
-        return new HikariDataSource(config);
+
+        try {
+            HikariDataSource ds = new HikariDataSource(config);
+            logger.info("✅ Conexión a base de datos establecida correctamente");
+            return ds;
+        } catch (Exception e) {
+            logger.error("❌ Error al crear la conexión a la base de datos: {}", e.getMessage());
+            logger.error("   JDBC URL usada: {}", jdbcUrl);
+            logger.error("   Usuario: {}", username);
+            throw new RuntimeException("No se pudo conectar a la base de datos: " + e.getMessage(), e);
+        }
     }
 }
 
